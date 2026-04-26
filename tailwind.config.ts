@@ -22,6 +22,13 @@ export default {
         primary: {
           DEFAULT: "hsl(var(--primary))",
           foreground: "hsl(var(--primary-foreground))",
+          glow: "hsl(var(--primary-glow))",
+          soft: "hsl(var(--primary-soft))",
+        },
+        map: {
+          province: "hsl(var(--map-province))",
+          "province-hover": "hsl(var(--map-province-hover))",
+          "province-stroke": "hsl(var(--map-province-stroke))",
         },
         secondary: {
           DEFAULT: "hsl(var(--secondary))",
