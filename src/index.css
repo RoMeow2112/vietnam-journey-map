@@ -103,6 +103,7 @@ All colors MUST be HSL.
     --sidebar-accent-foreground: 240 4.8% 95.9%;
     --sidebar-border: 240 3.7% 15.9%;
     --sidebar-ring: 217.2 91.2% 59.8%;
+    
   }
 }
 
@@ -114,4 +115,36 @@ All colors MUST be HSL.
   body {
     @apply bg-background text-foreground;
   }
+  @layer components {
+  .map-tooltip {
+    pointer-events: none;
+    z-index: 20;
+    opacity: 1;
+    animation: tooltipFadeIn 120ms ease-out;
+  }
+
+  .map-tooltip .maplibregl-popup-content {
+    background: #2f2f2f;
+    color: #ffffff;
+    padding: 5px 9px;
+    border-radius: 3px;
+    font-size: 12px;
+    line-height: 1;
+    font-weight: 500;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.18);
+  }
+
+  .map-tooltip .maplibregl-popup-tip {
+    border-top-color: #2f2f2f;
+  }
+
+  @keyframes tooltipFadeIn {
+    from {
+      opacity: 0;
+    }
+    to {
+      opacity: 1;
+    }
+  }
+}
 }
