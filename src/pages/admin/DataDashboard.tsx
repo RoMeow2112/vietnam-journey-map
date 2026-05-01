@@ -1,9 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { AlertTriangle, CheckCircle2, MapPin, XCircle } from "lucide-react";
-import {
-  getPlaceMarkers,
-  type PlaceMarker,
-} from "@/services/placeService";
+import { getPlaceMarkers, type PlaceMarker } from "@/services/placeService";
 
 type ProvinceFeature = {
   properties?: {
@@ -16,14 +13,41 @@ type ProvinceGeoJson = {
   features: ProvinceFeature[];
 };
 
+type DashboardPlace = PlaceMarker & {
+  mapKey?: string;
+  map_key?: string;
+  coverImage?: string;
+  cover_image?: string;
+  shortDescription?: string;
+  short_description?: string;
+  isActive?: boolean;
+  is_active?: boolean;
+};
+
 const GEOJSON_URL = "/data/vietnam-provinces.geojson";
 
 function isMissing(value: unknown) {
   return value === undefined || value === null || String(value).trim() === "";
 }
 
+function getMapKey(place: DashboardPlace) {
+  return place.map_key || place.mapKey || "";
+}
+
+function getCoverImage(place: DashboardPlace) {
+  return place.cover_image || place.coverImage || "";
+}
+
+function getShortDescription(place: DashboardPlace) {
+  return place.short_description || place.shortDescription || "";
+}
+
+function getIsActive(place: DashboardPlace) {
+  return place.is_active ?? place.isActive ?? true;
+}
+
 export default function DataDashboard() {
-  const [places, setPlaces] = useState<PlaceMarker[]>([]);
+  const [places, setPlaces] = useState<DashboardPlace[]>([]);
   const [provinces, setProvinces] = useState<ProvinceFeature[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -39,7 +63,7 @@ export default function DataDashboard() {
 
         const geojson = (await geojsonRes.json()) as ProvinceGeoJson;
 
-        setPlaces(placeData);
+        setPlaces(placeData as DashboardPlace[]);
         setProvinces(geojson.features || []);
       } catch (error) {
         console.error(error);
@@ -58,10 +82,7 @@ export default function DataDashboard() {
 
     const geoMapKeySet = new Set(geoMapKeys);
 
-    const placeMapKeys = places
-      .map((place) => place.map_key)
-      .filter(Boolean);
-
+    const placeMapKeys = places.map(getMapKey).filter(Boolean);
     const placeMapKeySet = new Set(placeMapKeys);
 
     const provincesWithData = geoMapKeys.filter((key) =>
@@ -73,9 +94,10 @@ export default function DataDashboard() {
       return key && !placeMapKeySet.has(key);
     });
 
-    const invalidMapKeyPlaces = places.filter(
-      (place) => !place.map_key || !geoMapKeySet.has(place.map_key),
-    );
+    const invalidMapKeyPlaces = places.filter((place) => {
+      const key = getMapKey(place);
+      return !key || !geoMapKeySet.has(key);
+    });
 
     const missingLatLngPlaces = places.filter(
       (place) =>
@@ -85,27 +107,13 @@ export default function DataDashboard() {
         Number.isNaN(place.lng),
     );
 
-    const inactivePlaces = places.filter((place) => {
-      const maybePlace = place as PlaceMarker & { is_active?: boolean };
-      return maybePlace.is_active === false;
-    });
+    const missingContentPlaces = places.filter(
+      (place) =>
+        isMissing(getCoverImage(place)) ||
+        isMissing(getShortDescription(place)),
+    );
 
-    const missingContentPlaces = places.filter((place) => {
-      const maybePlace = place as PlaceMarker & {
-        coverImage?: string;
-        cover_image?: string;
-        shortDescription?: string;
-        short_description?: string;
-      };
-
-      return (
-        isMissing(maybePlace.coverImage) &&
-        isMissing(maybePlace.cover_image)
-      ) || (
-        isMissing(maybePlace.shortDescription) &&
-        isMissing(maybePlace.short_description)
-      );
-    });
+    const inactivePlaces = places.filter((place) => getIsActive(place) === false);
 
     return {
       totalPlaces: places.length,
@@ -130,9 +138,7 @@ export default function DataDashboard() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-bold text-slate-900">
-          Data Dashboard
-        </h1>
+        <h1 className="text-2xl font-bold text-slate-900">Data Dashboard</h1>
         <p className="mt-1 text-sm text-slate-500">
           Kiểm tra chất lượng dữ liệu từ Google Sheet / Supabase.
         </p>
@@ -163,7 +169,8 @@ export default function DataDashboard() {
           value={
             stats.invalidMapKeyPlaces.length +
             stats.missingLatLngPlaces.length +
-            stats.missingContentPlaces.length
+            stats.missingContentPlaces.length +
+            stats.inactivePlaces.length
           }
           icon={<XCircle className="h-5 w-5" />}
         />
@@ -174,7 +181,7 @@ export default function DataDashboard() {
           title="Danh sách map_key bị sai"
           items={stats.invalidMapKeyPlaces.map((place) => ({
             title: place.name,
-            description: `map_key: ${place.map_key || "EMPTY"}`,
+            description: `map_key: ${getMapKey(place) || "EMPTY"}`,
           }))}
         />
 
@@ -190,7 +197,14 @@ export default function DataDashboard() {
           title="Địa điểm thiếu image/description"
           items={stats.missingContentPlaces.map((place) => ({
             title: place.name,
-            description: place.province,
+            description: [
+              isMissing(getCoverImage(place)) ? "missing image" : "",
+              isMissing(getShortDescription(place))
+                ? "missing description"
+                : "",
+            ]
+              .filter(Boolean)
+              .join(" · "),
           }))}
         />
 
@@ -227,19 +241,15 @@ function StatCard({
 }) {
   return (
     <div className="rounded-2xl bg-white p-5 shadow-sm">
-      <div className="flex items-center justify-between">
-        <div className="rounded-xl bg-emerald-50 p-2 text-emerald-600">
-          {icon}
-        </div>
+      <div className="rounded-xl bg-emerald-50 p-2 text-emerald-600 w-fit">
+        {icon}
       </div>
 
       <p className="mt-4 text-sm text-slate-500">{title}</p>
 
       <div className="mt-1 flex items-end gap-1">
         <p className="text-3xl font-bold text-slate-900">{value}</p>
-        {subText && (
-          <p className="mb-1 text-sm text-slate-500">{subText}</p>
-        )}
+        {subText && <p className="mb-1 text-sm text-slate-500">{subText}</p>}
       </div>
     </div>
   );
@@ -271,14 +281,9 @@ function IssueSection({
           </div>
         ) : (
           items.map((item, index) => (
-            <div
-              key={`${item.title}-${index}`}
-              className="rounded-xl border p-3"
-            >
+            <div key={`${item.title}-${index}`} className="rounded-xl border p-3">
               <p className="font-medium text-slate-900">{item.title}</p>
-              <p className="mt-1 text-xs text-slate-500">
-                {item.description}
-              </p>
+              <p className="mt-1 text-xs text-slate-500">{item.description}</p>
             </div>
           ))
         )}
