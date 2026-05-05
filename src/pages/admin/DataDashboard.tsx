@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
 import { AlertTriangle, CheckCircle2, MapPin, XCircle } from "lucide-react";
-import { getPlaceMarkers, type PlaceMarker } from "@/services/placeService";
 
 type ProvinceFeature = {
   properties?: {
@@ -13,18 +12,25 @@ type ProvinceGeoJson = {
   features: ProvinceFeature[];
 };
 
-type DashboardPlace = PlaceMarker & {
-  mapKey?: string;
+type DashboardPlace = {
+  id: string;
+  name: string;
+  province: string;
+  region: string;
   map_key?: string;
-  coverImage?: string;
+  mapKey?: string;
+  lat?: number;
+  lng?: number;
   cover_image?: string;
-  shortDescription?: string;
+  coverImage?: string;
   short_description?: string;
-  isActive?: boolean;
-  is_active?: boolean;
+  shortDescription?: string;
+  is_active?: boolean | string;
+  isActive?: boolean | string;
 };
 
 const GEOJSON_URL = "/data/vietnam-provinces.geojson";
+const API_URL = import.meta.env.VITE_APPS_SCRIPT_URL as string;
 
 function isMissing(value: unknown) {
   return value === undefined || value === null || String(value).trim() === "";
@@ -43,7 +49,32 @@ function getShortDescription(place: DashboardPlace) {
 }
 
 function getIsActive(place: DashboardPlace) {
-  return place.is_active ?? place.isActive ?? true;
+  const value = place.is_active ?? place.isActive ?? true;
+
+  if (typeof value === "string") {
+    return value.toLowerCase() === "true";
+  }
+
+  return value;
+}
+
+function getLat(place: DashboardPlace) {
+  return Number(place.lat);
+}
+
+function getLng(place: DashboardPlace) {
+  return Number(place.lng);
+}
+
+async function getRawPlaces(): Promise<DashboardPlace[]> {
+  const response = await fetch(`${API_URL}?action=places`);
+  const json = await response.json();
+
+  if (!json.success) {
+    throw new Error(json.message || "Cannot load places");
+  }
+
+  return json.places || [];
 }
 
 export default function DataDashboard() {
@@ -57,13 +88,13 @@ export default function DataDashboard() {
         setLoading(true);
 
         const [placeData, geojsonRes] = await Promise.all([
-          getPlaceMarkers(),
+          getRawPlaces(),
           fetch(GEOJSON_URL),
         ]);
 
         const geojson = (await geojsonRes.json()) as ProvinceGeoJson;
 
-        setPlaces(placeData as DashboardPlace[]);
+        setPlaces(placeData);
         setProvinces(geojson.features || []);
       } catch (error) {
         console.error(error);
@@ -99,13 +130,17 @@ export default function DataDashboard() {
       return !key || !geoMapKeySet.has(key);
     });
 
-    const missingLatLngPlaces = places.filter(
-      (place) =>
-        typeof place.lat !== "number" ||
-        typeof place.lng !== "number" ||
-        Number.isNaN(place.lat) ||
-        Number.isNaN(place.lng),
-    );
+    const missingLatLngPlaces = places.filter((place) => {
+      const lat = getLat(place);
+      const lng = getLng(place);
+
+      return (
+        Number.isNaN(lat) ||
+        Number.isNaN(lng) ||
+        lat === 0 ||
+        lng === 0
+      );
+    });
 
     const missingContentPlaces = places.filter(
       (place) =>
@@ -241,7 +276,7 @@ function StatCard({
 }) {
   return (
     <div className="rounded-2xl bg-white p-5 shadow-sm">
-      <div className="rounded-xl bg-emerald-50 p-2 text-emerald-600 w-fit">
+      <div className="w-fit rounded-xl bg-emerald-50 p-2 text-emerald-600">
         {icon}
       </div>
 

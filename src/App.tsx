@@ -7,21 +7,30 @@ import AdminHome from "@/pages/admin/AdminHome";
 import AdminLayout from "@/layouts/AdminLayout";
 import AdminUsers from "@/pages/admin/AdminUsers";
 import DataDashboard from "@/pages/admin/DataDashboard";
+import UserLogin from "./pages/UserLogin";
+import NotFound from "./pages/NotFound";
+import AuthCallback from "./pages/AuthCallback";
 
 export default function App() {
   return (
-    <BrowserRouter>
-      <Routes>
-        <Route path="/" element={<Index />} />
-        <Route path="/admin/login" element={<AdminLogin />} />
-        <Route element={<AdminGuard />}>
-          <Route path="/admin" element={<AdminLayout />}>
-            <Route index element={<AdminHome />} />
-            <Route path="users" element={<AdminUsers />} />
-            <Route path="data-dashboard" element={<DataDashboard />} />
-          </Route>
-        </Route>
-      </Routes>
-    </BrowserRouter>
+   <BrowserRouter>
+  <Routes>
+    <Route path="/" element={<Index />} />
+
+    <Route path="/login" element={<UserLogin />} />
+    <Route path="/auth/callback" element={<AuthCallback />} />
+
+    <Route path="/admin/login" element={<AdminLogin />} />
+
+    <Route element={<AdminGuard />}>
+      <Route path="/admin" element={<AdminLayout />}>
+        <Route index element={<AdminHome />} />
+        <Route path="users" element={<AdminUsers />} />
+        <Route path="data-dashboard" element={<DataDashboard />} />
+        <Route path="*" element={<NotFound />} />
+      </Route>
+    </Route>
+  </Routes>
+</BrowserRouter>
   );
 }
