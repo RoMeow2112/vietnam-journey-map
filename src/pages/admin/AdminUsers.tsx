@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { supabase } from "@/lib/supabase";
+import { adminSupabase} from "@/lib/supabase";
 import { Plus, Pencil, Trash2, Save, X } from "lucide-react";
 
 type UserRole = "admin" | "user";
@@ -33,7 +33,7 @@ export default function AdminUsers() {
   async function loadUsers() {
     setLoading(true);
 
-    const { data, error } = await supabase
+    const { data, error } = await adminSupabase
       .from("profiles")
       .select("*")
       .order("created_at", { ascending: false });
@@ -58,7 +58,7 @@ export default function AdminUsers() {
       return;
     }
 
-    const { error } = await supabase.from("profiles").insert({
+    const { error } = await adminSupabase.from("profiles").insert({
       email: form.email.trim(),
       role: form.role,
       is_active: form.is_active,
@@ -93,7 +93,7 @@ export default function AdminUsers() {
   }
 
   async function updateUser(id: string) {
-    const { error } = await supabase
+    const { error } = await adminSupabase
       .from("profiles")
       .update({
         email: editForm.email.trim(),
@@ -117,7 +117,7 @@ export default function AdminUsers() {
     const ok = confirm("Delete this user?");
     if (!ok) return;
 
-    const { error } = await supabase.from("profiles").delete().eq("id", id);
+    const { error } = await adminSupabase.from("profiles").delete().eq("id", id);
 
     if (error) {
       console.error("Delete user error:", error);

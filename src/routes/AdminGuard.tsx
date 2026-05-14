@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Navigate, Outlet } from "react-router-dom";
-import { supabase } from "@/lib/supabase";
+import { adminSupabase } from "@/lib/supabase";
 
 type Profile = {
   id: string;
@@ -15,7 +15,7 @@ export default function AdminGuard() {
 
   useEffect(() => {
     async function checkAuth() {
-      const { data: sessionData } = await supabase.auth.getSession();
+      const { data: sessionData } = await adminSupabase.auth.getSession();
 
       const user = sessionData.session?.user;
 
@@ -25,7 +25,7 @@ export default function AdminGuard() {
         return;
       }
 
-      const { data: profile, error } = await supabase
+      const { data: profile, error } = await adminSupabase
         .from("profiles")
         .select("id,email,role,is_active")
         .eq("id", user.id)
@@ -43,7 +43,7 @@ export default function AdminGuard() {
 
     checkAuth();
 
-    const { data } = supabase.auth.onAuthStateChange(() => {
+    const { data } = adminSupabase.auth.onAuthStateChange(() => {
       checkAuth();
     });
 

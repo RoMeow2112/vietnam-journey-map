@@ -5,13 +5,16 @@ import maplibregl, {
   type MapLayerMouseEvent,
 } from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
+
 import {
   getPlaceDetail,
   getPlacesByRegion,
   type PlaceDetail,
   type PlaceMarker,
 } from "@/services/placeService";
+import { supabase } from "@/lib/supabase";
 import PlaceModal from "@/components/PlaceModal";
+import LoginRequiredModal from "@/components/LoginRequiredModal";
 
 type RegionProperties = {
   name?: string;
@@ -157,9 +160,48 @@ export default function GoongMap() {
   const [activeRegionName, setActiveRegionName] = useState("");
   const [regionPlaces, setRegionPlaces] = useState<PlaceMarker[]>([]);
   const [loadingRegion, setLoadingRegion] = useState(false);
+
   const [selectedPlace, setSelectedPlace] = useState<PlaceDetail | null>(null);
   const [modalOpen, setModalOpen] = useState(false);
   const [loadingDetailId, setLoadingDetailId] = useState<string | null>(null);
+
+  const [loginModalOpen, setLoginModalOpen] = useState(false);
+  const [pendingPlaceId, setPendingPlaceId] = useState<string | null>(null);
+
+  async function isLoggedIn() {
+    const {
+      data: { session },
+    } = await supabase.auth.getSession();
+
+    return !!session?.user;
+  }
+
+  async function openPlaceById(id: string) {
+    try {
+      setLoadingDetailId(id);
+
+      const detail = await getPlaceDetail(id);
+
+      setSelectedPlace(detail);
+      setModalOpen(true);
+    } catch (error: unknown) {
+      console.error(error);
+    } finally {
+      setLoadingDetailId(null);
+    }
+  }
+
+  async function requireLoginThenOpenPlace(id: string) {
+    const loggedIn = await isLoggedIn();
+
+    if (!loggedIn) {
+      setPendingPlaceId(id);
+      setLoginModalOpen(true);
+      return;
+    }
+
+    await openPlaceById(id);
+  }
 
   useEffect(() => {
     if (!mapContainerRef.current || mapRef.current) return;
@@ -340,42 +382,39 @@ export default function GoongMap() {
       map.setMaxZoom(lockedZoom);
 
       const popup = new maplibregl.Popup({
-  closeButton: false,
-  closeOnClick: false,
-  offset: 8,
-  className: "map-tooltip",
-});
+        closeButton: false,
+        closeOnClick: false,
+        offset: 8,
+        className: "map-tooltip",
+      });
 
       map.on("mousemove", REGION_FILL_LAYER_ID, (event: MapLayerMouseEvent) => {
-  const feature = event.features?.[0];
-  const key = feature?.properties?.map_key as string;
-  const name = feature?.properties?.name as string;
+        const feature = event.features?.[0];
+        const key = feature?.properties?.map_key as string;
+        const name = feature?.properties?.name as string;
 
-  if (!key) return;
+        if (!key) return;
 
-  map.getCanvas().style.cursor = "pointer";
+        map.getCanvas().style.cursor = "pointer";
 
-  // 🔥 Nếu vẫn đang hover cùng tỉnh → bỏ qua (KHÔNG update tooltip)
-  if (hoveredRegionRef.current === key) return;
+        if (hoveredRegionRef.current === key) return;
 
-  // 🔄 reset vùng cũ
-  if (hoveredRegionRef.current) {
-    map.setFeatureState(
-      { source: REGION_SOURCE_ID, id: hoveredRegionRef.current },
-      { hover: false },
-    );
-  }
+        if (hoveredRegionRef.current) {
+          map.setFeatureState(
+            { source: REGION_SOURCE_ID, id: hoveredRegionRef.current },
+            { hover: false },
+          );
+        }
 
-  hoveredRegionRef.current = key;
+        hoveredRegionRef.current = key;
 
-  map.setFeatureState(
-    { source: REGION_SOURCE_ID, id: key },
-    { hover: true },
-  );
+        map.setFeatureState(
+          { source: REGION_SOURCE_ID, id: key },
+          { hover: true },
+        );
 
-  // 🔥 Chỉ set + addTo khi đổi tỉnh
-  popup.setLngLat(event.lngLat).setHTML(`<span>${name}</span>`).addTo(map);
-});
+        popup.setLngLat(event.lngLat).setHTML(`<span>${name}</span>`).addTo(map);
+      });
 
       map.on("mouseleave", REGION_FILL_LAYER_ID, () => {
         map.getCanvas().style.cursor = "";
@@ -411,9 +450,18 @@ export default function GoongMap() {
         setActiveRegionName(name);
         setLoadingRegion(true);
 
+        const bounds = getBoundsFromGeometry(feature.geometry);
+
+        if (!bounds.isEmpty()) {
+          map.fitBounds(bounds, {
+            padding: 80,
+            duration: 650,
+            maxZoom: 6.5,
+          });
+        }
+
         try {
-          const places =
-            cacheRef.current[key] || (await getPlacesByRegion(key));
+          const places = cacheRef.current[key] || (await getPlacesByRegion(key));
 
           cacheRef.current[key] = places;
           setRegionPlaces(places);
@@ -460,16 +508,7 @@ export default function GoongMap() {
 
         if (!id) return;
 
-        try {
-          setLoadingDetailId(String(id));
-          const detail = await getPlaceDetail(String(id));
-          setSelectedPlace(detail);
-          setModalOpen(true);
-        } catch (error: unknown) {
-          console.error(error);
-        } finally {
-          setLoadingDetailId(null);
-        }
+        await requireLoginThenOpenPlace(String(id));
       });
 
       map.on("mouseenter", CLUSTER_LAYER_ID, () => {
@@ -506,22 +545,18 @@ export default function GoongMap() {
     const source = map.getSource(PLACES_SOURCE_ID) as GeoJSONSource | undefined;
     source?.setData(placesToGeoJson([]));
 
+    map.fitBounds(VN_FIT_BOUNDS, {
+      padding: 8,
+      duration: 500,
+    });
+
     setActiveRegionKey(null);
     setActiveRegionName("");
     setRegionPlaces([]);
   }
 
   async function openPlace(place: PlaceMarker) {
-    try {
-      setLoadingDetailId(place.id);
-      const detail = await getPlaceDetail(place.id);
-      setSelectedPlace(detail);
-      setModalOpen(true);
-    } catch (error: unknown) {
-      console.error(error);
-    } finally {
-      setLoadingDetailId(null);
-    }
+    await requireLoginThenOpenPlace(place.id);
   }
 
   return (
@@ -587,6 +622,20 @@ export default function GoongMap() {
         place={selectedPlace}
         onClose={() => setModalOpen(false)}
         onAddToJourney={() => setModalOpen(false)}
+      />
+
+      <LoginRequiredModal
+        open={loginModalOpen}
+        onClose={() => {
+          setLoginModalOpen(false);
+          setPendingPlaceId(null);
+        }}
+        onLoginSuccess={() => {
+          if (pendingPlaceId) {
+            openPlaceById(pendingPlaceId);
+            setPendingPlaceId(null);
+          }
+        }}
       />
     </div>
   );

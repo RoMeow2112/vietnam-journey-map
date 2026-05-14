@@ -9,7 +9,6 @@ export default function AuthCallback() {
   useEffect(() => {
     async function handleAuth() {
       try {
-        // lấy session sau khi Google redirect về
         const {
           data: { session },
           error,
@@ -20,25 +19,48 @@ export default function AuthCallback() {
           return;
         }
 
-        const userId = session.user.id;
+        const user = session.user;
 
-        // check profile (đã được trigger tạo)
-        const { data, error: profileError } = await supabase
+        const { data: existingProfile, error: profileError } = await supabase
           .from("profiles")
-          .select("is_active")
-          .eq("id", userId)
-          .single();
+          .select("id,is_active")
+          .eq("id", user.id)
+          .maybeSingle();
+
+        let profile = existingProfile;
+
+        // fallback: nếu trigger chưa tạo profile thì tạo bằng FE
+        if (!profile && !profileError) {
+          const { data: insertedProfile, error: insertError } = await supabase
+            .from("profiles")
+            .insert({
+              id: user.id,
+              email: user.email,
+              role: "user",
+              is_active: false,
+            })
+            .select("id,is_active")
+            .single();
+
+          if (insertError) {
+            console.error(insertError);
+            setMessage("Không tạo được profile.");
+            await supabase.auth.signOut();
+            return;
+          }
+
+          profile = insertedProfile;
+        }
 
         if (profileError) {
           console.error(profileError);
-          setMessage("Không tìm thấy profile.");
+          setMessage("Không kiểm tra được profile.");
+          await supabase.auth.signOut();
           return;
         }
 
-        // ❌ chưa được verify
-        if (!data?.is_active) {
+        if (!profile?.is_active) {
           await supabase.auth.signOut();
-
           setMessage("Tài khoản đang chờ admin verify.");
 
           setTimeout(() => {
@@ -48,14 +70,14 @@ export default function AuthCallback() {
           return;
         }
 
-        // ✅ OK → vào hệ thống
         setMessage("Đăng nhập thành công...");
 
         setTimeout(() => {
           navigate("/");
-        }, 1000);
+        }, 800);
       } catch (err) {
         console.error(err);
+        await supabase.auth.signOut();
         setMessage("Có lỗi xảy ra.");
       }
     }
@@ -64,8 +86,8 @@ export default function AuthCallback() {
   }, [navigate]);
 
   return (
-    <div className="flex min-h-screen items-center justify-center">
-      <div className="rounded-xl border px-6 py-4 text-sm text-slate-600">
+    <div className="flex min-h-screen items-center justify-center bg-slate-50 px-4">
+      <div className="rounded-xl border bg-white px-6 py-4 text-sm text-slate-600 shadow-sm">
         {message}
       </div>
     </div>

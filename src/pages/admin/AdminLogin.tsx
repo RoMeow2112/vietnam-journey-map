@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { supabase } from "@/lib/supabase";
+import { adminSupabase } from "@/lib/supabase";
 
 export default function AdminLogin() {
   const navigate = useNavigate();
@@ -17,7 +17,7 @@ export default function AdminLogin() {
     setLoading(true);
     setErrorMessage("");
 
-    const { data, error } = await supabase.auth.signInWithPassword({
+    const { data, error } = await adminSupabase.auth.signInWithPassword({
       email,
       password,
     });
@@ -28,7 +28,7 @@ export default function AdminLogin() {
       return;
     }
 
-    const { data: profile, error: profileError } = await supabase
+    const { data: profile, error: profileError } = await adminSupabase
       .from("profiles")
       .select("role,is_active")
       .eq("id", data.user.id)
@@ -40,7 +40,7 @@ export default function AdminLogin() {
       profile.role !== "admin" ||
       !profile.is_active
     ) {
-      await supabase.auth.signOut();
+      await adminSupabase.auth.signOut();
       setErrorMessage("Tài khoản không có quyền admin.");
       setLoading(false);
       return;
