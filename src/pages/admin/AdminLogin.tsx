@@ -40,7 +40,7 @@ export default function AdminLogin() {
       profile.role !== "admin" ||
       !profile.is_active
     ) {
-      await adminSupabase.auth.signOut();
+      await adminSupabase.auth.signOut({ scope: "local" });
       setErrorMessage("Tài khoản không có quyền admin.");
       setLoading(false);
       return;

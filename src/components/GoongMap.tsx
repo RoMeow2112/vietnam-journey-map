@@ -295,15 +295,36 @@ export default function GoongMap() {
       });
 
       map.addLayer({
-        id: REGION_LINE_LAYER_ID,
-        type: "line",
-        source: REGION_SOURCE_ID,
-        paint: {
-          "line-color": "#059669",
-          "line-width": 1.2,
-          "line-opacity": 0.9,
-        },
-      });
+  id: REGION_LINE_LAYER_ID,
+  type: "line",
+  source: REGION_SOURCE_ID,
+  paint: {
+    "line-color": [
+      "case",
+      ["boolean", ["feature-state", "active"], false],
+      "#065f46",
+      ["boolean", ["feature-state", "hover"], false],
+      "#047857",
+      "#059669",
+    ],
+    "line-width": [
+      "case",
+      ["boolean", ["feature-state", "active"], false],
+      3.5,
+      ["boolean", ["feature-state", "hover"], false],
+      3,
+      1.2,
+    ],
+    "line-opacity": [
+      "case",
+      ["boolean", ["feature-state", "active"], false],
+      1,
+      ["boolean", ["feature-state", "hover"], false],
+      1,
+      0.85,
+    ],
+  },
+});
 
       map.addSource(PLACES_SOURCE_ID, {
         type: "geojson",

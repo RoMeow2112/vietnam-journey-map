@@ -45,7 +45,7 @@ export default function AuthCallback() {
           if (insertError) {
             console.error(insertError);
             setMessage("Không tạo được profile.");
-            await supabase.auth.signOut();
+            await supabase.auth.signOut({ scope: "local" });
             return;
           }
 
@@ -55,12 +55,12 @@ export default function AuthCallback() {
         if (profileError) {
           console.error(profileError);
           setMessage("Không kiểm tra được profile.");
-          await supabase.auth.signOut();
+          await supabase.auth.signOut({ scope: "local" });
           return;
         }
 
         if (!profile?.is_active) {
-          await supabase.auth.signOut();
+          await supabase.auth.signOut({ scope: "local" });
           setMessage("Tài khoản đang chờ admin verify.");
 
           setTimeout(() => {
@@ -77,7 +77,7 @@ export default function AuthCallback() {
         }, 800);
       } catch (err) {
         console.error(err);
-        await supabase.auth.signOut();
+        await supabase.auth.signOut({ scope: "local" });
         setMessage("Có lỗi xảy ra.");
       }
     }

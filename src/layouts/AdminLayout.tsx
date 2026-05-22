@@ -1,6 +1,6 @@
 import { NavLink, Outlet, useNavigate } from "react-router-dom";
 import { BarChart3, Home, LogOut, Users } from "lucide-react";
-import { supabase } from "@/lib/supabase";
+import { adminSupabase } from "@/lib/supabase";
 
 const navItems = [
   { label: "Dashboard", path: "/admin", icon: Home },
@@ -12,8 +12,8 @@ export default function AdminLayout() {
   const navigate = useNavigate();
 
   async function handleLogout() {
-    await supabase.auth.signOut();
-    navigate("/admin/login", { replace: true });
+  await adminSupabase.auth.signOut({ scope: "local" });
+  navigate("/admin/login", { replace: true });
   }
 
   return (
