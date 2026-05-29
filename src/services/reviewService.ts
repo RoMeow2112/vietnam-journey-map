@@ -30,7 +30,14 @@ export type PlaceReview = {
   media_urls: ReviewMediaItem[];
   created_at: string;
   updated_at?: string | null;
+  deleted_at?: string | null;
+  deleted_by?: string | null;
   profiles?: ReviewProfile;
+};
+
+export type AdminPlaceReview = PlaceReview & {
+  user_name?: string;
+  place_name?: string;
 };
 
 export type UpsertPlaceReviewPayload = {
@@ -189,16 +196,22 @@ export async function getPlaceReviews(placeId: string) {
       content,
       media_urls,
       created_at,
-      updated_at
+      updated_at,
+      deleted_at,
+      deleted_by
     `)
     .eq("place_id", placeId)
+    .is("deleted_at", null)
     .order("created_at", { ascending: false });
 
   if (error) {
+    console.error("Load reviews error:", error);
     return { data: null, error };
   }
 
-  const userIds = [...new Set((reviews || []).map((item) => item.user_id))];
+  const userIds = [
+    ...new Set((reviews || []).map((item) => item.user_id).filter(Boolean)),
+  ];
 
   if (userIds.length === 0) {
     return { data: reviews || [], error: null };
@@ -206,7 +219,7 @@ export async function getPlaceReviews(placeId: string) {
 
   const { data: profiles, error: profileError } = await supabase
     .from("profiles")
-    .select("id,email,full_name,display_name")
+    .select("id,display_name")
     .in("id", userIds);
 
   if (profileError) {
@@ -215,29 +228,31 @@ export async function getPlaceReviews(placeId: string) {
   }
 
   const profileMap = new Map(
-  (profiles || []).map((profile) => [
-    String(profile.id),
-    String(profile.display_name || "Ẩn danh"),
-  ]),
-);
+    (profiles || []).map((profile) => [
+      String(profile.id),
+      profile.display_name?.trim() || `User ${String(profile.id).slice(0, 8)}`,
+    ]),
+  );
 
-const reviewsWithProfiles = (reviews || []).map((review) => ({
-  ...review,
-  profiles: {
-    display_name: profileMap.get(String(review.user_id)) || "Ẩn danh",
-  },
-}));
+  const reviewsWithProfiles = (reviews || []).map((review) => ({
+    ...review,
+    profiles: {
+      display_name: profileMap.get(String(review.user_id)) || "Ẩn danh",
+    },
+  }));
 
-return {
-  data: reviewsWithProfiles,
-  error: null,
-};
+  return {
+    data: reviewsWithProfiles,
+    error: null,
+  };
 }
 
 export async function upsertPlaceReview(payload: UpsertPlaceReviewPayload) {
   return supabase.from("place_reviews").upsert(
     {
       ...payload,
+      deleted_at: null,
+      deleted_by: null,
       updated_at: new Date().toISOString(),
     },
     {
@@ -246,34 +261,111 @@ export async function upsertPlaceReview(payload: UpsertPlaceReviewPayload) {
   );
 }
 
-export async function deletePlaceReview(reviewId: string) {
-  return supabase.from("place_reviews").delete().eq("id", reviewId);
+export async function softDeletePlaceReview(reviewId: string, deletedBy: string) {
+  return supabase
+    .from("place_reviews")
+    .update({
+      deleted_at: new Date().toISOString(),
+      deleted_by: deletedBy,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", reviewId)
+    .is("deleted_at", null);
 }
 
-export async function deleteReviewWithMedia(review: PlaceReview) {
-  const media = review.media_urls || [];
+export async function adminSoftDeletePlaceReview(
+  reviewId: string,
+  deletedBy: string,
+) {
+  return adminSupabase
+    .from("place_reviews")
+    .update({
+      deleted_at: new Date().toISOString(),
+      deleted_by: deletedBy,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", reviewId)
+    .is("deleted_at", null);
+}
 
-  if (media.length > 0) {
-    const { error: mediaError } = await removeReviewMedia(media);
-    if (mediaError) throw mediaError;
-  }
-
-  const { error } = await deletePlaceReview(review.id);
+export async function deleteReviewWithMedia(
+  review: PlaceReview,
+  deletedBy: string,
+) {
+  const { error } = await softDeletePlaceReview(review.id, deletedBy);
   if (error) throw error;
 }
 
-export async function adminDeletePlaceReview(reviewId: string) {
-  return adminSupabase.from("place_reviews").delete().eq("id", reviewId);
+export async function adminDeleteReviewWithMedia(
+  review: PlaceReview,
+  deletedBy: string,
+) {
+  const { error } = await adminSoftDeletePlaceReview(review.id, deletedBy);
+  if (error) throw error;
 }
 
-export async function adminDeleteReviewWithMedia(review: PlaceReview) {
-  const media = review.media_urls || [];
+export async function getAdminReviews() {
+  const { data: reviews, error } = await adminSupabase
+    .from("place_reviews")
+    .select(`
+      id,
+      place_id,
+      user_id,
+      rating,
+      content,
+      media_urls,
+      created_at,
+      updated_at,
+      deleted_at,
+      deleted_by
+    `)
+    .is("deleted_at", null)
+    .order("created_at", { ascending: false });
 
-  if (media.length > 0) {
-    const { error: mediaError } = await adminRemoveReviewMedia(media);
-    if (mediaError) throw mediaError;
+  if (error) {
+    return { data: null, error };
   }
 
-  const { error } = await adminDeletePlaceReview(review.id);
-  if (error) throw error;
+  const userIds = [
+    ...new Set((reviews || []).map((item) => item.user_id).filter(Boolean)),
+  ];
+
+  const placeIds = [
+    ...new Set((reviews || []).map((item) => item.place_id).filter(Boolean)),
+  ];
+
+  const [{ data: profiles }, { data: places }] = await Promise.all([
+    userIds.length
+      ? adminSupabase.from("profiles").select("id,display_name").in("id", userIds)
+      : Promise.resolve({ data: [] }),
+
+    placeIds.length
+      ? adminSupabase.from("places").select("id,name,province").in("id", placeIds)
+      : Promise.resolve({ data: [] }),
+  ]);
+
+  const profileMap = new Map(
+    (profiles || []).map((profile) => [
+      String(profile.id),
+      profile.display_name?.trim() || `User ${String(profile.id).slice(0, 8)}`,
+    ]),
+  );
+
+  const placeMap = new Map(
+    (places || []).map((place) => [
+      String(place.id),
+      `${place.name}${place.province ? ` - ${place.province}` : ""}`,
+    ]),
+  );
+
+  const normalizedReviews: AdminPlaceReview[] = (reviews || []).map((review) => ({
+    ...review,
+    user_name: profileMap.get(String(review.user_id)) || "Ẩn danh",
+    place_name: placeMap.get(String(review.place_id)) || review.place_id,
+  }));
+
+  return {
+    data: normalizedReviews,
+    error: null,
+  };
 }

@@ -5,6 +5,42 @@ import { LogIn, Map } from "lucide-react";
 
 type Mode = "login" | "register";
 
+async function syncUserProfile() {
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user) return null;
+
+  const displayName =
+    user.user_metadata?.display_name ||
+    user.user_metadata?.full_name ||
+    user.user_metadata?.name ||
+    user.email?.split("@")[0] ||
+    "User";
+
+  const { data, error } = await supabase
+    .from("profiles")
+    .upsert(
+      {
+        id: user.id,
+        display_name: displayName,
+      },
+      {
+        onConflict: "id",
+      },
+    )
+    .select("id,display_name,is_active")
+    .single();
+
+  if (error) {
+    console.error("[syncUserProfile error]", error);
+    return null;
+  }
+
+  return data;
+}
+
 export default function UserLogin() {
   const navigate = useNavigate();
 
@@ -38,7 +74,7 @@ export default function UserLogin() {
     setLoading(true);
     setMessage("");
 
-    const { data, error } = await supabase.auth.signInWithPassword({
+    const { error } = await supabase.auth.signInWithPassword({
       email: email.trim(),
       password,
     });
@@ -49,21 +85,17 @@ export default function UserLogin() {
       return;
     }
 
-    const { data: profile } = await supabase
-      .from("profiles")
-      .select("is_active")
-      .eq("id", data.user.id)
-      .single();
+    const profile = await syncUserProfile();
 
     if (!profile?.is_active) {
       await supabase.auth.signOut();
 
       setMessage("Tài khoản đang chờ admin verify.");
-
       setLoading(false);
       return;
     }
 
+    setLoading(false);
     navigate("/");
   }
 
@@ -81,22 +113,29 @@ export default function UserLogin() {
     setLoading(true);
     setMessage("");
 
-    const { error } = await supabase.auth.signUp({
+    const { data, error } = await supabase.auth.signUp({
       email: email.trim(),
       password,
+      options: {
+        data: {
+          display_name: email.trim().split("@")[0],
+        },
+      },
     });
 
     if (error) {
       setMessage(error.message);
-    } else {
-      setMessage(
-        "Đăng ký thành công. Tài khoản đang chờ admin verify.",
-      );
-
-      setMode("login");
-      setPassword("");
+      setLoading(false);
+      return;
     }
 
+    if (data.user) {
+      await syncUserProfile();
+    }
+
+    setMessage("Đăng ký thành công. Tài khoản đang chờ admin verify.");
+    setMode("login");
+    setPassword("");
     setLoading(false);
   }
 
@@ -211,10 +250,7 @@ export default function UserLogin() {
                 Ghi nhớ đăng nhập
               </label>
 
-              <button
-                type="button"
-                className="text-primary hover:underline"
-              >
+              <button type="button" className="text-primary hover:underline">
                 Quên mật khẩu?
               </button>
             </div>

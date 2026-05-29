@@ -3,9 +3,9 @@ import { Link } from "react-router-dom";
 import {
   Database,
   MapPin,
+  MessageSquare,
   Users,
   UserCheck,
-  LogOut,
 } from "lucide-react";
 
 import { adminSupabase } from "@/lib/supabase";
@@ -31,6 +31,7 @@ export default function AdminHome() {
   const [pendingUsers, setPendingUsers] = useState(0);
 
   const [totalPlaces, setTotalPlaces] = useState(0);
+  const [totalReviews, setTotalReviews] = useState(0);
 
   async function handleLogout() {
     await adminSupabase.auth.signOut();
@@ -41,7 +42,6 @@ export default function AdminHome() {
     try {
       setLoading(true);
 
-      // USERS
       const { data: users, error } = await adminSupabase
         .from("profiles")
         .select("id,email,role,is_active");
@@ -54,22 +54,25 @@ export default function AdminHome() {
       const userList = (users || []) as Profile[];
 
       setTotalUsers(userList.length);
+      setActiveUsers(userList.filter((u) => u.is_active).length);
+      setPendingUsers(userList.filter((u) => !u.is_active).length);
 
-      setActiveUsers(
-        userList.filter((u) => u.is_active).length,
-      );
-
-      setPendingUsers(
-        userList.filter((u) => !u.is_active).length,
-      );
-
-      // PLACES
       const response = await fetch(`${API_URL}?action=places`);
       const json = await response.json();
-
       const places = (json.places || []) as Place[];
 
       setTotalPlaces(places.length);
+
+      const { count: reviewCount, error: reviewError } = await adminSupabase
+        .from("place_reviews")
+        .select("id", { count: "exact", head: true })
+        .is("deleted_at", null);
+
+      if (reviewError) {
+        console.error(reviewError);
+      } else {
+        setTotalReviews(reviewCount || 0);
+      }
     } catch (error) {
       console.error(error);
     } finally {
@@ -108,7 +111,7 @@ export default function AdminHome() {
         </div>
       ) : (
         <>
-          <div className="grid gap-4 md:grid-cols-4">
+          <div className="grid gap-4 md:grid-cols-5">
             <StatCard
               title="Total Users"
               value={totalUsers}
@@ -132,6 +135,12 @@ export default function AdminHome() {
               value={totalPlaces}
               icon={<MapPin className="h-5 w-5" />}
             />
+
+            <StatCard
+              title="Total Reviews"
+              value={totalReviews}
+              icon={<MessageSquare className="h-5 w-5" />}
+            />
           </div>
 
           <div className="grid gap-6 lg:grid-cols-2">
@@ -153,6 +162,13 @@ export default function AdminHome() {
                   icon={<Database className="h-5 w-5" />}
                   title="Data Dashboard"
                   desc="Kiểm tra dữ liệu map"
+                />
+
+                <QuickLink
+                  to="/admin/reviews"
+                  icon={<MessageSquare className="h-5 w-5" />}
+                  title="Manage Reviews"
+                  desc="Xem và xoá mềm review spam"
                 />
               </div>
             </div>

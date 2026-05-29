@@ -10,6 +10,7 @@ import DataDashboard from "@/pages/admin/DataDashboard";
 import UserLogin from "./pages/UserLogin";
 import NotFound from "./pages/NotFound";
 import AuthCallback from "./pages/AuthCallback";
+import AdminReviews from "@/pages/admin/AdminReviews";
 
 export default function App() {
   return (
@@ -27,6 +28,7 @@ export default function App() {
         <Route index element={<AdminHome />} />
         <Route path="users" element={<AdminUsers />} />
         <Route path="data-dashboard" element={<DataDashboard />} />
+        <Route path="reviews" element={<AdminReviews />} />
         <Route path="*" element={<NotFound />} />
       </Route>
     </Route>

@@ -3,7 +3,6 @@ import { ImagePlus, Star, Trash2, X } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import {
   adminDeleteReviewWithMedia,
-  deleteReviewWithMedia,
   getPlaceReviews,
   getReviewUserEmail,
   type PlaceReview,
@@ -66,7 +65,7 @@ export default function PlaceReviews({ placeId }: PlaceReviewsProps) {
       console.error(error);
       setReviews([]);
     } else {
-      setReviews((data || []) as unknown as PlaceReview[]);
+      setReviews((data || []) as PlaceReview[]);
     }
 
     setLoading(false);
@@ -132,16 +131,16 @@ export default function PlaceReviews({ placeId }: PlaceReviewsProps) {
   }
 
   async function handleDelete(review: PlaceReview) {
-    const ok = confirm("Xoá đánh giá này?");
+    if (!currentUserId || !isAdmin) {
+      alert("Chỉ admin mới được xoá đánh giá.");
+      return;
+    }
+
+    const ok = confirm("Admin xoá mềm đánh giá này?");
     if (!ok) return;
 
     try {
-      if (isAdmin && review.user_id !== currentUserId) {
-        await adminDeleteReviewWithMedia(review);
-      } else {
-        await deleteReviewWithMedia(review);
-      }
-
+      await adminDeleteReviewWithMedia(review, currentUserId);
       await loadReviews();
     } catch (error) {
       console.error(error);
@@ -285,7 +284,7 @@ export default function PlaceReviews({ placeId }: PlaceReviewsProps) {
         )}
 
         {reviews.map((review) => {
-          const canDelete = review.user_id === currentUserId || isAdmin;
+          const canDelete = isAdmin;
 
           return (
             <div key={review.id} className="rounded-2xl border p-4">
@@ -314,7 +313,7 @@ export default function PlaceReviews({ placeId }: PlaceReviewsProps) {
                     type="button"
                     onClick={() => handleDelete(review)}
                     className="rounded-lg p-2 text-red-500 hover:bg-red-50"
-                    title={isAdmin ? "Admin xoá review spam" : "Xoá review"}
+                    title="Admin xoá review spam"
                   >
                     <Trash2 className="h-4 w-4" />
                   </button>

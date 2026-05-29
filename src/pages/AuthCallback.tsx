@@ -2,6 +2,19 @@ import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/lib/supabase";
 
+function getDisplayName(user: {
+  email?: string;
+  user_metadata?: Record<string, unknown>;
+}) {
+  return (
+    user.user_metadata?.display_name ||
+    user.user_metadata?.full_name ||
+    user.user_metadata?.name ||
+    user.email?.split("@")[0] ||
+    "User"
+  );
+}
+
 export default function AuthCallback() {
   const navigate = useNavigate();
   const [message, setMessage] = useState("Đang xử lý đăng nhập...");
@@ -20,43 +33,61 @@ export default function AuthCallback() {
         }
 
         const user = session.user;
+        const displayName = getDisplayName(user);
 
         const { data: existingProfile, error: profileError } = await supabase
           .from("profiles")
-          .select("id,is_active")
+          .select("id,display_name,is_active")
           .eq("id", user.id)
           .maybeSingle();
 
+        if (profileError) {
+          console.error("[profileError]", profileError);
+          setMessage("Không kiểm tra được profile.");
+          await supabase.auth.signOut({ scope: "local" });
+          return;
+        }
+
         let profile = existingProfile;
 
-        // fallback: nếu trigger chưa tạo profile thì tạo bằng FE
-        if (!profile && !profileError) {
+        if (!profile) {
           const { data: insertedProfile, error: insertError } = await supabase
             .from("profiles")
             .insert({
               id: user.id,
-              email: user.email,
+              display_name: displayName,
               role: "user",
               is_active: false,
             })
-            .select("id,is_active")
+            .select("id,display_name,is_active")
             .single();
 
           if (insertError) {
-            console.error(insertError);
+            console.error("[insertProfileError]", insertError);
             setMessage("Không tạo được profile.");
             await supabase.auth.signOut({ scope: "local" });
             return;
           }
 
           profile = insertedProfile;
-        }
+        } else if (!profile.display_name) {
+          const { data: updatedProfile, error: updateError } = await supabase
+            .from("profiles")
+            .update({
+              display_name: displayName,
+            })
+            .eq("id", user.id)
+            .select("id,display_name,is_active")
+            .single();
 
-        if (profileError) {
-          console.error(profileError);
-          setMessage("Không kiểm tra được profile.");
-          await supabase.auth.signOut({ scope: "local" });
-          return;
+          if (updateError) {
+            console.error("[updateProfileError]", updateError);
+            setMessage("Không cập nhật được tên user.");
+            await supabase.auth.signOut({ scope: "local" });
+            return;
+          }
+
+          profile = updatedProfile;
         }
 
         if (!profile?.is_active) {
@@ -76,7 +107,7 @@ export default function AuthCallback() {
           navigate("/");
         }, 800);
       } catch (err) {
-        console.error(err);
+        console.error("[AuthCallback error]", err);
         await supabase.auth.signOut({ scope: "local" });
         setMessage("Có lỗi xảy ra.");
       }

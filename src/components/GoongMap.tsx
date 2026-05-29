@@ -1,10 +1,19 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import maplibregl, {
   type GeoJSONSource,
   type Map,
   type MapLayerMouseEvent,
 } from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
+
+import {
+  CheckCircle2,
+  Info,
+  LocateFixed,
+  MapPinned,
+  Trash2,
+  X,
+} from "lucide-react";
 
 import {
   getPlaceDetail,
@@ -30,17 +39,21 @@ type RegionGeoJson = GeoJSON.FeatureCollection<
   RegionProperties
 >;
 
-type PlacesGeoJsonProperties = {
-  id: string;
+type PendingVisitedRegion = {
+  key: string;
   name: string;
-  province: string;
-  region: string;
-  map_key: string;
 };
 
-type PlacesGeoJson = GeoJSON.FeatureCollection<
+type UserLocation = {
+  lng: number;
+  lat: number;
+};
+
+type UserLocationGeoJson = GeoJSON.FeatureCollection<
   GeoJSON.Point,
-  PlacesGeoJsonProperties
+  {
+    type: "user-location";
+  }
 >;
 
 const REGION_SOURCE_ID = "regions";
@@ -48,11 +61,9 @@ const REGION_FILL_LAYER_ID = "region-fill";
 const REGION_LINE_LAYER_ID = "region-line";
 const REGION_GLOW_LAYER_ID = "region-glow";
 
-const PLACES_SOURCE_ID = "places";
-const CLUSTER_LAYER_ID = "places-cluster";
-const CLUSTER_COUNT_LAYER_ID = "places-cluster-count";
-const PLACE_DOT_LAYER_ID = "places-dot";
-const PLACE_LABEL_LAYER_ID = "places-label";
+const USER_LOCATION_SOURCE_ID = "user-location";
+const USER_LOCATION_PULSE_LAYER_ID = "user-location-pulse";
+const USER_LOCATION_DOT_LAYER_ID = "user-location-dot";
 
 const VN_FIT_BOUNDS: [[number, number], [number, number]] = [
   [101.5, 7.5],
@@ -73,57 +84,39 @@ const BLANK_VN_STYLE: maplibregl.StyleSpecification = {
   ],
 };
 
-function getBoundsFromGeometry(geometry: RegionGeometry) {
-  const bounds = new maplibregl.LngLatBounds();
-
-  const addCoordinate = (coord: GeoJSON.Position) => {
-    const [lng, lat] = coord;
-
-    if (Number.isFinite(lng) && Number.isFinite(lat)) {
-      bounds.extend([lng, lat]);
-    }
-  };
-
-  if (geometry.type === "Polygon") {
-    geometry.coordinates.forEach((ring) => {
-      ring.forEach(addCoordinate);
-    });
-  }
-
-  if (geometry.type === "MultiPolygon") {
-    geometry.coordinates.forEach((polygon) => {
-      polygon.forEach((ring) => {
-        ring.forEach(addCoordinate);
-      });
-    });
-  }
-
-  return bounds;
-}
-
-function placesToGeoJson(places: PlaceMarker[]): PlacesGeoJson {
+function emptyUserLocationGeoJson(): UserLocationGeoJson {
   return {
     type: "FeatureCollection",
-    features: places.map((place) => ({
-      type: "Feature",
-      properties: {
-        id: place.id,
-        name: place.name,
-        province: place.province,
-        region: place.region,
-        map_key: place.map_key,
+    features: [],
+  };
+}
+
+function userLocationToGeoJson(
+  location: UserLocation | null,
+): UserLocationGeoJson {
+  if (!location) return emptyUserLocationGeoJson();
+
+  return {
+    type: "FeatureCollection",
+    features: [
+      {
+        type: "Feature",
+        properties: {
+          type: "user-location",
+        },
+        geometry: {
+          type: "Point",
+          coordinates: [location.lng, location.lat],
+        },
       },
-      geometry: {
-        type: "Point",
-        coordinates: [place.lng, place.lat],
-      },
-    })),
+    ],
   };
 }
 
 function clearActiveRegion(map: Map, geojson: RegionGeoJson) {
   geojson.features.forEach((feature) => {
     const key = feature.properties?.map_key;
+
     if (!key) return;
 
     map.setFeatureState(
@@ -160,6 +153,18 @@ export default function GoongMap() {
   const [activeRegionName, setActiveRegionName] = useState("");
   const [regionPlaces, setRegionPlaces] = useState<PlaceMarker[]>([]);
   const [loadingRegion, setLoadingRegion] = useState(false);
+  const [showRegionDetail, setShowRegionDetail] = useState(false);
+
+  const [visitedProvinceKeys, setVisitedProvinceKeys] = useState<string[]>([]);
+  const [confirmVisitedOpen, setConfirmVisitedOpen] = useState(false);
+  const [markingVisited, setMarkingVisited] = useState(false);
+
+  const [confirmRemoveVisitedOpen, setConfirmRemoveVisitedOpen] =
+    useState(false);
+  const [removingVisited, setRemovingVisited] = useState(false);
+
+  const [pendingVisitedRegion, setPendingVisitedRegion] =
+    useState<PendingVisitedRegion | null>(null);
 
   const [selectedPlace, setSelectedPlace] = useState<PlaceDetail | null>(null);
   const [modalOpen, setModalOpen] = useState(false);
@@ -168,6 +173,14 @@ export default function GoongMap() {
   const [loginModalOpen, setLoginModalOpen] = useState(false);
   const [pendingPlaceId, setPendingPlaceId] = useState<string | null>(null);
 
+  const [userLocation, setUserLocation] = useState<UserLocation | null>(null);
+  const [locationPermissionDenied, setLocationPermissionDenied] =
+    useState(false);
+
+  const activeRegionVisited = activeRegionKey
+    ? visitedProvinceKeys.includes(activeRegionKey)
+    : false;
+
   async function isLoggedIn() {
     const {
       data: { session },
@@ -175,6 +188,128 @@ export default function GoongMap() {
 
     return !!session?.user;
   }
+
+  const setUserLocationOnMap = useCallback((location: UserLocation | null) => {
+    const map = mapRef.current;
+
+    if (!map) return;
+
+    const source = map.getSource(USER_LOCATION_SOURCE_ID) as
+      | GeoJSONSource
+      | undefined;
+
+    if (!source) return;
+
+    source.setData(userLocationToGeoJson(location));
+  }, []);
+
+  const requestUserLocationIfLoggedIn = useCallback(async () => {
+    const loggedIn = await isLoggedIn();
+
+    if (!loggedIn) {
+      setUserLocation(null);
+      setUserLocationOnMap(null);
+      return;
+    }
+
+    if (!navigator.geolocation) {
+      console.warn("Browser does not support geolocation.");
+      return;
+    }
+
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        const location = {
+          lng: position.coords.longitude,
+          lat: position.coords.latitude,
+        };
+
+        setUserLocation(location);
+        setLocationPermissionDenied(false);
+        setUserLocationOnMap(location);
+      },
+      (error) => {
+        console.warn("Geolocation error:", error);
+        setUserLocation(null);
+        setUserLocationOnMap(null);
+        setLocationPermissionDenied(true);
+      },
+      {
+        enableHighAccuracy: true,
+        timeout: 10000,
+        maximumAge: 60000,
+      },
+    );
+  }, [setUserLocationOnMap]);
+
+  const applyVisitedState = useCallback((provinceKeys: string[]) => {
+    const map = mapRef.current;
+
+    if (!map) return;
+
+    const source = map.getSource(REGION_SOURCE_ID);
+
+    if (!source) return;
+
+    provinceKeys.forEach((key) => {
+      map.setFeatureState(
+        {
+          source: REGION_SOURCE_ID,
+          id: key,
+        },
+        {
+          visited: true,
+        },
+      );
+    });
+  }, []);
+
+  const removeVisitedState = useCallback((provinceKey: string) => {
+    const map = mapRef.current;
+
+    if (!map) return;
+
+    const source = map.getSource(REGION_SOURCE_ID);
+
+    if (!source) return;
+
+    map.setFeatureState(
+      {
+        source: REGION_SOURCE_ID,
+        id: provinceKey,
+      },
+      {
+        visited: false,
+      },
+    );
+  }, []);
+
+  const loadVisitedProvinces = useCallback(async () => {
+    try {
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+
+      if (!session?.user) {
+        setVisitedProvinceKeys([]);
+        return;
+      }
+
+      const { data, error } = await supabase
+        .from("user_visited_provinces")
+        .select("province_key")
+        .eq("user_id", session.user.id);
+
+      if (error) throw error;
+
+      const keys = (data || []).map((item) => item.province_key as string);
+
+      setVisitedProvinceKeys(keys);
+      applyVisitedState(keys);
+    } catch (error) {
+      console.error(error);
+    }
+  }, [applyVisitedState]);
 
   async function openPlaceById(id: string) {
     try {
@@ -202,6 +337,161 @@ export default function GoongMap() {
 
     await openPlaceById(id);
   }
+
+  function handleShowRegionDetail() {
+    setShowRegionDetail(true);
+  }
+
+  async function handleMarkVisited() {
+    if (!activeRegionKey || !activeRegionName) return;
+
+    if (activeRegionVisited) return;
+
+    const loggedIn = await isLoggedIn();
+
+    if (!loggedIn) {
+      setPendingVisitedRegion({
+        key: activeRegionKey,
+        name: activeRegionName,
+      });
+      setLoginModalOpen(true);
+      return;
+    }
+
+    setConfirmVisitedOpen(true);
+  }
+
+  async function confirmMarkVisited() {
+    if (!activeRegionKey || !activeRegionName) return;
+
+    try {
+      setMarkingVisited(true);
+
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+
+      if (!session?.user) {
+        setLoginModalOpen(true);
+        return;
+      }
+
+      const { error } = await supabase.from("user_visited_provinces").upsert(
+        {
+          user_id: session.user.id,
+          province_key: activeRegionKey,
+          province_name: activeRegionName,
+        },
+        {
+          onConflict: "user_id,province_key",
+        },
+      );
+
+      if (error) throw error;
+
+      setVisitedProvinceKeys((prev) => {
+        if (prev.includes(activeRegionKey)) return prev;
+        return [...prev, activeRegionKey];
+      });
+
+      applyVisitedState([activeRegionKey]);
+
+      window.dispatchEvent(new Event("visited-provinces-updated"));
+
+      setConfirmVisitedOpen(false);
+    } catch (error) {
+      console.error(error);
+    } finally {
+      setMarkingVisited(false);
+    }
+  }
+
+  function handleOpenRemoveVisitedConfirm() {
+    if (!activeRegionKey || !activeRegionVisited) return;
+
+    setConfirmRemoveVisitedOpen(true);
+  }
+
+  async function confirmRemoveVisited() {
+    if (!activeRegionKey) return;
+
+    try {
+      setRemovingVisited(true);
+
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+
+      if (!session?.user) {
+        setLoginModalOpen(true);
+        return;
+      }
+
+      const { error } = await supabase
+        .from("user_visited_provinces")
+        .delete()
+        .eq("user_id", session.user.id)
+        .eq("province_key", activeRegionKey);
+
+      if (error) throw error;
+
+      setVisitedProvinceKeys((prev) =>
+        prev.filter((key) => key !== activeRegionKey),
+      );
+
+      removeVisitedState(activeRegionKey);
+
+      window.dispatchEvent(new Event("visited-provinces-updated"));
+
+      setConfirmRemoveVisitedOpen(false);
+    } catch (error) {
+      console.error(error);
+    } finally {
+      setRemovingVisited(false);
+    }
+  }
+
+  function resetRegion() {
+    const map = mapRef.current;
+    const geojson = geojsonRef.current;
+
+    if (!map || !geojson) return;
+
+    clearActiveRegion(map, geojson);
+
+    setActiveRegionKey(null);
+    setActiveRegionName("");
+    setRegionPlaces([]);
+    setShowRegionDetail(false);
+    setConfirmVisitedOpen(false);
+    setConfirmRemoveVisitedOpen(false);
+  }
+
+  async function openPlace(place: PlaceMarker) {
+    await requireLoginThenOpenPlace(place.id);
+  }
+
+  useEffect(() => {
+    loadVisitedProvinces();
+    requestUserLocationIfLoggedIn();
+
+    window.addEventListener("visited-provinces-updated", loadVisitedProvinces);
+
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange(() => {
+      loadVisitedProvinces();
+      requestUserLocationIfLoggedIn();
+    });
+
+    return () => {
+      window.removeEventListener(
+        "visited-provinces-updated",
+        loadVisitedProvinces,
+      );
+      subscription.unsubscribe();
+    };
+  }, [loadVisitedProvinces, requestUserLocationIfLoggedIn]);
 
   useEffect(() => {
     if (!mapContainerRef.current || mapRef.current) return;
@@ -245,18 +535,22 @@ export default function GoongMap() {
           "fill-color": [
             "case",
             ["boolean", ["feature-state", "active"], false],
-            "#10b981",
+            "#059669",
+            ["boolean", ["feature-state", "visited"], false],
+            "#f97316",
             ["boolean", ["feature-state", "hover"], false],
             "#34d399",
-            "#bbf7d0",
+            "#d1fae5",
           ],
           "fill-opacity": [
             "case",
             ["boolean", ["feature-state", "active"], false],
-            0.55,
+            0.86,
+            ["boolean", ["feature-state", "visited"], false],
+            0.96,
             ["boolean", ["feature-state", "hover"], false],
-            0.42,
-            0.24,
+            0.5,
+            0.18,
           ],
         },
       });
@@ -269,7 +563,9 @@ export default function GoongMap() {
           "line-color": [
             "case",
             ["boolean", ["feature-state", "active"], false],
-            "#047857",
+            "#065f46",
+            ["boolean", ["feature-state", "visited"], false],
+            "#9a3412",
             ["boolean", ["feature-state", "hover"], false],
             "#10b981",
             "#22c55e",
@@ -277,6 +573,8 @@ export default function GoongMap() {
           "line-width": [
             "case",
             ["boolean", ["feature-state", "active"], false],
+            5.5,
+            ["boolean", ["feature-state", "visited"], false],
             5,
             ["boolean", ["feature-state", "hover"], false],
             4,
@@ -285,111 +583,89 @@ export default function GoongMap() {
           "line-opacity": [
             "case",
             ["boolean", ["feature-state", "active"], false],
-            0.8,
+            0.95,
+            ["boolean", ["feature-state", "visited"], false],
+            0.9,
             ["boolean", ["feature-state", "hover"], false],
             0.65,
             0,
           ],
-          "line-blur": 3,
+          "line-blur": [
+            "case",
+            ["boolean", ["feature-state", "visited"], false],
+            1.8,
+            3,
+          ],
         },
       });
 
       map.addLayer({
-  id: REGION_LINE_LAYER_ID,
-  type: "line",
-  source: REGION_SOURCE_ID,
-  paint: {
-    "line-color": [
-      "case",
-      ["boolean", ["feature-state", "active"], false],
-      "#065f46",
-      ["boolean", ["feature-state", "hover"], false],
-      "#047857",
-      "#059669",
-    ],
-    "line-width": [
-      "case",
-      ["boolean", ["feature-state", "active"], false],
-      3.5,
-      ["boolean", ["feature-state", "hover"], false],
-      3,
-      1.2,
-    ],
-    "line-opacity": [
-      "case",
-      ["boolean", ["feature-state", "active"], false],
-      1,
-      ["boolean", ["feature-state", "hover"], false],
-      1,
-      0.85,
-    ],
-  },
+        id: REGION_LINE_LAYER_ID,
+        type: "line",
+        source: REGION_SOURCE_ID,
+        paint: {
+          "line-color": [
+            "case",
+            ["boolean", ["feature-state", "active"], false],
+            "#064e3b",
+            ["boolean", ["feature-state", "visited"], false],
+            "#7c2d12",
+            ["boolean", ["feature-state", "hover"], false],
+            "#047857",
+            "#10b981",
+          ],
+          "line-width": [
+            "case",
+            ["boolean", ["feature-state", "active"], false],
+            3.8,
+            ["boolean", ["feature-state", "visited"], false],
+            3.6,
+            ["boolean", ["feature-state", "hover"], false],
+            3,
+            1,
+          ],
+          "line-opacity": [
+            "case",
+            ["boolean", ["feature-state", "active"], false],
+            1,
+            ["boolean", ["feature-state", "visited"], false],
+            1,
+            ["boolean", ["feature-state", "hover"], false],
+            1,
+            0.7,
+          ],
+        },
+      });
+
+      map.addSource(USER_LOCATION_SOURCE_ID, {
+  type: "geojson",
+  data: emptyUserLocationGeoJson(),
 });
 
-      map.addSource(PLACES_SOURCE_ID, {
-        type: "geojson",
-        data: placesToGeoJson([]),
-        cluster: true,
-        clusterRadius: 48,
-        clusterMaxZoom: 12,
-      });
-
       map.addLayer({
-        id: CLUSTER_LAYER_ID,
+        id: USER_LOCATION_PULSE_LAYER_ID,
         type: "circle",
-        source: PLACES_SOURCE_ID,
-        filter: ["has", "point_count"],
+        source: USER_LOCATION_SOURCE_ID,
         paint: {
-          "circle-color": "#111827",
-          "circle-radius": ["step", ["get", "point_count"], 18, 5, 24, 10, 30],
-          "circle-opacity": 0.9,
-          "circle-stroke-color": "#ffffff",
-          "circle-stroke-width": 3,
+          "circle-color": "#2563eb",
+          "circle-radius": 18,
+          "circle-opacity": 0.18,
+          "circle-stroke-color": "#2563eb",
+          "circle-stroke-width": 2,
+          "circle-stroke-opacity": 0.28,
         },
       });
 
       map.addLayer({
-        id: CLUSTER_COUNT_LAYER_ID,
-        type: "symbol",
-        source: PLACES_SOURCE_ID,
-        filter: ["has", "point_count"],
-        layout: {
-          "text-field": ["get", "point_count_abbreviated"],
-          "text-size": 12,
-        },
-        paint: {
-          "text-color": "#ffffff",
-        },
-      });
-
-      map.addLayer({
-        id: PLACE_DOT_LAYER_ID,
+        id: USER_LOCATION_DOT_LAYER_ID,
         type: "circle",
-        source: PLACES_SOURCE_ID,
-        filter: ["!", ["has", "point_count"]],
+        source: USER_LOCATION_SOURCE_ID,
         paint: {
-          "circle-color": "#111827",
-          "circle-radius": 8,
+          "circle-color": "#2563eb",
+          "circle-radius": 7,
+          "circle-opacity": 1,
           "circle-stroke-color": "#ffffff",
-          "circle-stroke-width": 3,
-        },
-      });
-
-      map.addLayer({
-        id: PLACE_LABEL_LAYER_ID,
-        type: "symbol",
-        source: PLACES_SOURCE_ID,
-        filter: ["!", ["has", "point_count"]],
-        layout: {
-          "text-field": ["get", "name"],
-          "text-size": 12,
-          "text-offset": [0, 1.35],
-          "text-anchor": "top",
-        },
-        paint: {
-          "text-color": "#111827",
-          "text-halo-color": "#ffffff",
-          "text-halo-width": 1,
+          "circle-stroke-width": 4,
         },
       });
 
@@ -401,6 +677,9 @@ export default function GoongMap() {
       const lockedZoom = map.getZoom();
       map.setMinZoom(lockedZoom);
       map.setMaxZoom(lockedZoom);
+
+      await loadVisitedProvinces();
+      await requestUserLocationIfLoggedIn();
 
       const popup = new maplibregl.Popup({
         closeButton: false,
@@ -422,16 +701,26 @@ export default function GoongMap() {
 
         if (hoveredRegionRef.current) {
           map.setFeatureState(
-            { source: REGION_SOURCE_ID, id: hoveredRegionRef.current },
-            { hover: false },
+            {
+              source: REGION_SOURCE_ID,
+              id: hoveredRegionRef.current,
+            },
+            {
+              hover: false,
+            },
           );
         }
 
         hoveredRegionRef.current = key;
 
         map.setFeatureState(
-          { source: REGION_SOURCE_ID, id: key },
-          { hover: true },
+          {
+            source: REGION_SOURCE_ID,
+            id: key,
+          },
+          {
+            hover: true,
+          },
         );
 
         popup.setLngLat(event.lngLat).setHTML(`<span>${name}</span>`).addTo(map);
@@ -443,8 +732,13 @@ export default function GoongMap() {
 
         if (hoveredRegionRef.current) {
           map.setFeatureState(
-            { source: REGION_SOURCE_ID, id: hoveredRegionRef.current },
-            { hover: false },
+            {
+              source: REGION_SOURCE_ID,
+              id: hoveredRegionRef.current,
+            },
+            {
+              hover: false,
+            },
           );
         }
 
@@ -453,6 +747,7 @@ export default function GoongMap() {
 
       map.on("click", REGION_FILL_LAYER_ID, async (event: MapLayerMouseEvent) => {
         const feature = event.features?.[0] as RegionFeature | undefined;
+
         if (!feature?.geometry) return;
 
         const key = feature.properties?.map_key;
@@ -463,89 +758,33 @@ export default function GoongMap() {
         clearActiveRegion(map, geojson);
 
         map.setFeatureState(
-          { source: REGION_SOURCE_ID, id: key },
-          { active: true },
+          {
+            source: REGION_SOURCE_ID,
+            id: key,
+          },
+          {
+            active: true,
+          },
         );
 
         setActiveRegionKey(key);
         setActiveRegionName(name);
         setLoadingRegion(true);
-
-        const bounds = getBoundsFromGeometry(feature.geometry);
-
-        if (!bounds.isEmpty()) {
-          map.fitBounds(bounds, {
-            padding: 80,
-            duration: 650,
-            maxZoom: 6.5,
-          });
-        }
+        setShowRegionDetail(false);
+        setConfirmVisitedOpen(false);
+        setConfirmRemoveVisitedOpen(false);
 
         try {
           const places = cacheRef.current[key] || (await getPlacesByRegion(key));
 
           cacheRef.current[key] = places;
           setRegionPlaces(places);
-
-          const source = map.getSource(PLACES_SOURCE_ID) as GeoJSONSource;
-          source.setData(placesToGeoJson(places));
         } catch (error: unknown) {
           console.error(error);
           setRegionPlaces([]);
         } finally {
           setLoadingRegion(false);
         }
-      });
-
-      map.on("click", CLUSTER_LAYER_ID, async (event: MapLayerMouseEvent) => {
-        const features = map.queryRenderedFeatures(event.point, {
-          layers: [CLUSTER_LAYER_ID],
-        });
-
-        const cluster = features[0];
-        const clusterId = cluster?.properties?.cluster_id;
-
-        const source = map.getSource(PLACES_SOURCE_ID) as GeoJSONSource;
-
-        if (typeof clusterId !== "number") return;
-
-        const zoom = await source.getClusterExpansionZoom(clusterId);
-
-        const geometry = cluster.geometry;
-
-        if (geometry.type !== "Point") return;
-
-        const [lng, lat] = geometry.coordinates;
-
-        map.easeTo({
-          center: [lng, lat],
-          zoom,
-        });
-      });
-
-      map.on("click", PLACE_DOT_LAYER_ID, async (event: MapLayerMouseEvent) => {
-        const feature = event.features?.[0];
-        const id = feature?.properties?.id;
-
-        if (!id) return;
-
-        await requireLoginThenOpenPlace(String(id));
-      });
-
-      map.on("mouseenter", CLUSTER_LAYER_ID, () => {
-        map.getCanvas().style.cursor = "pointer";
-      });
-
-      map.on("mouseleave", CLUSTER_LAYER_ID, () => {
-        map.getCanvas().style.cursor = "";
-      });
-
-      map.on("mouseenter", PLACE_DOT_LAYER_ID, () => {
-        map.getCanvas().style.cursor = "pointer";
-      });
-
-      map.on("mouseleave", PLACE_DOT_LAYER_ID, () => {
-        map.getCanvas().style.cursor = "";
       });
     });
 
@@ -555,86 +794,215 @@ export default function GoongMap() {
     };
   }, []);
 
-  function resetRegion() {
-    const map = mapRef.current;
-    const geojson = geojsonRef.current;
-
-    if (!map || !geojson) return;
-
-    clearActiveRegion(map, geojson);
-
-    const source = map.getSource(PLACES_SOURCE_ID) as GeoJSONSource | undefined;
-    source?.setData(placesToGeoJson([]));
-
-    map.fitBounds(VN_FIT_BOUNDS, {
-      padding: 8,
-      duration: 500,
-    });
-
-    setActiveRegionKey(null);
-    setActiveRegionName("");
-    setRegionPlaces([]);
-  }
-
-  async function openPlace(place: PlaceMarker) {
-    await requireLoginThenOpenPlace(place.id);
-  }
-
   return (
-    <div className="relative overflow-hidden rounded-2xl border bg-white shadow-sm">
-      <div ref={mapContainerRef} className="h-[680px] w-full" />
+    <div className="relative overflow-hidden bg-white">
+      <div ref={mapContainerRef} className="h-[calc(100vh-76px)] w-full" />
+
+      {userLocation && (
+        <div className="absolute right-4 top-4 z-10 flex items-center gap-2 rounded-full border border-blue-200 bg-white/95 px-3 py-2 text-xs font-medium text-blue-700 shadow-sm backdrop-blur">
+          <LocateFixed className="h-4 w-4" />
+          Đã xác định vị trí của bạn
+        </div>
+      )}
+
+      {!userLocation && locationPermissionDenied && (
+        <div className="absolute right-4 top-4 z-10 max-w-[260px] rounded-xl border border-orange-200 bg-white/95 px-3 py-2 text-xs leading-5 text-orange-700 shadow-sm backdrop-blur">
+          Bạn chưa cho phép truy cập vị trí hiện tại.
+        </div>
+      )}
 
       {activeRegionKey && (
-        <div className="absolute left-4 top-4 z-10 w-[330px] rounded-2xl bg-white/95 p-4 shadow-xl backdrop-blur">
-          <p className="text-xs font-semibold uppercase tracking-wide text-emerald-600">
-            Khu vực đang chọn
-          </p>
-
-          <h3 className="mt-1 text-xl font-bold text-slate-900">
-            {activeRegionName}
-          </h3>
-
-          <p className="mt-1 text-sm text-slate-500">
-            {loadingRegion
-              ? "Đang tải địa điểm..."
-              : `${regionPlaces.length} địa điểm trong khu vực này`}
-          </p>
-
-          <div className="mt-4 max-h-[360px] space-y-2 overflow-y-auto pr-1">
-            {!loadingRegion && regionPlaces.length === 0 && (
-              <div className="rounded-xl border border-dashed p-4 text-sm text-slate-500">
-                Chưa có địa điểm nào cho vùng này.
-              </div>
-            )}
-
-            {regionPlaces.map((place) => (
-              <button
-                key={place.id}
-                type="button"
-                onClick={() => openPlace(place)}
-                className="w-full rounded-xl border bg-white p-3 text-left transition hover:border-emerald-400 hover:bg-emerald-50"
-              >
-                <p className="font-semibold text-slate-900">{place.name}</p>
-                <p className="mt-1 text-xs text-slate-500">
-                  {place.province} · {place.region}
-                </p>
-
-                {loadingDetailId === place.id && (
-                  <p className="mt-1 text-xs text-emerald-600">
-                    Đang tải chi tiết...
-                  </p>
-                )}
-              </button>
-            ))}
-          </div>
-
+        <div className="absolute left-4 top-4 z-10 w-[330px] rounded-2xl bg-[#1f1f1f] p-4 text-white shadow-[0_16px_40px_rgba(0,0,0,0.35)]">
           <button
             type="button"
             onClick={resetRegion}
-            className="mt-4 w-full rounded-xl border px-3 py-2 text-sm font-medium hover:bg-slate-50"
+            className="absolute right-3 top-3 flex h-7 w-7 items-center justify-center rounded-full bg-white/10 text-white/70 transition hover:bg-white/20 hover:text-white"
           >
-            Bỏ chọn vùng
+            <X className="h-4 w-4" />
           </button>
+
+          <h3 className="pr-8 text-center text-lg font-semibold">
+            {activeRegionName}
+          </h3>
+
+          <div className="mt-4 grid grid-cols-2 gap-3">
+            <button
+              type="button"
+              onClick={handleShowRegionDetail}
+              className="flex min-h-[92px] flex-col items-center justify-center gap-2 rounded-xl bg-white/5 px-3 py-3 text-center transition hover:bg-white/10 active:scale-[0.98]"
+            >
+              <Info className="h-7 w-7 text-white/75" />
+
+              <span className="text-xs font-medium leading-4 text-white">
+                Xem thông tin
+                <br />
+                chi tiết
+              </span>
+            </button>
+
+            <button
+              type="button"
+              onClick={handleMarkVisited}
+              disabled={activeRegionVisited}
+              className="flex min-h-[92px] flex-col items-center justify-center gap-2 rounded-xl bg-white/5 px-3 py-3 text-center transition hover:bg-white/10 active:scale-[0.98] disabled:cursor-default disabled:bg-orange-500/25"
+            >
+              <CheckCircle2
+                className={
+                  activeRegionVisited
+                    ? "h-7 w-7 text-orange-300"
+                    : "h-7 w-7 text-white/75"
+                }
+              />
+
+              <span className="text-xs font-medium leading-4 text-white">
+                {activeRegionVisited ? (
+                  <>
+                    ✓ Đã đi
+                    <br />
+                    địa điểm này
+                  </>
+                ) : (
+                  <>
+                    Đã đi
+                    <br />
+                    địa điểm này
+                  </>
+                )}
+              </span>
+            </button>
+          </div>
+
+          {activeRegionVisited && (
+            <button
+              type="button"
+              onClick={handleOpenRemoveVisitedConfirm}
+              className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl border border-red-400/30 bg-red-500/10 px-3 py-2.5 text-sm font-medium text-red-200 transition hover:bg-red-500/20 active:scale-[0.98]"
+            >
+              <Trash2 className="h-4 w-4" />
+              Bỏ đánh dấu đã đi
+            </button>
+          )}
+
+          {showRegionDetail && (
+            <div className="mt-4 rounded-xl bg-white p-3 text-slate-900">
+              <div className="mb-3 flex items-center gap-2">
+                <MapPinned className="h-4 w-4 text-emerald-600" />
+
+                <p className="text-sm font-semibold">Thông tin khu vực</p>
+              </div>
+
+              <p className="mb-3 text-xs text-slate-500">
+                {loadingRegion
+                  ? "Đang tải địa điểm..."
+                  : `${regionPlaces.length} địa điểm trong khu vực này`}
+              </p>
+
+              <div className="max-h-[300px] space-y-2 overflow-y-auto pr-1">
+                {!loadingRegion && regionPlaces.length === 0 && (
+                  <div className="rounded-xl border border-dashed p-4 text-sm text-slate-500">
+                    Chưa có địa điểm nào cho vùng này.
+                  </div>
+                )}
+
+                {regionPlaces.map((place) => (
+                  <button
+                    key={place.id}
+                    type="button"
+                    onClick={() => openPlace(place)}
+                    className="w-full rounded-xl border bg-white p-3 text-left transition hover:border-emerald-400 hover:bg-emerald-50"
+                  >
+                    <p className="font-semibold text-slate-900">
+                      {place.name}
+                    </p>
+
+                    <p className="mt-1 text-xs text-slate-500">
+                      {place.province} · {place.region}
+                    </p>
+
+                    {loadingDetailId === place.id && (
+                      <p className="mt-1 text-xs text-emerald-600">
+                        Đang tải chi tiết...
+                      </p>
+                    )}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {confirmVisitedOpen && (
+        <div className="absolute inset-0 z-30 flex items-center justify-center bg-black/20 px-4 backdrop-blur-sm">
+          <div className="w-full max-w-[360px] rounded-2xl bg-white p-5 text-slate-900 shadow-[0_20px_60px_rgba(0,0,0,0.25)]">
+            <h3 className="text-lg font-semibold">
+              Xác nhận địa điểm đã đi
+            </h3>
+
+            <p className="mt-2 text-sm leading-6 text-slate-600">
+              Bạn xác nhận đã đi{" "}
+              <span className="font-semibold text-slate-900">
+                {activeRegionName}
+              </span>
+              ?
+            </p>
+
+            <div className="mt-5 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setConfirmVisitedOpen(false)}
+                disabled={markingVisited}
+                className="rounded-lg border px-4 py-2 text-sm font-medium transition hover:bg-slate-50 disabled:opacity-60"
+              >
+                Huỷ
+              </button>
+
+              <button
+                type="button"
+                onClick={confirmMarkVisited}
+                disabled={markingVisited}
+                className="rounded-lg bg-orange-500 px-4 py-2 text-sm font-semibold text-white transition hover:bg-orange-600 disabled:opacity-60"
+              >
+                {markingVisited ? "Đang lưu..." : "Xác nhận"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {confirmRemoveVisitedOpen && (
+        <div className="absolute inset-0 z-30 flex items-center justify-center bg-black/20 px-4 backdrop-blur-sm">
+          <div className="w-full max-w-[360px] rounded-2xl bg-white p-5 text-slate-900 shadow-[0_20px_60px_rgba(0,0,0,0.25)]">
+            <h3 className="text-lg font-semibold">Bỏ đánh dấu đã đi</h3>
+
+            <p className="mt-2 text-sm leading-6 text-slate-600">
+              Bạn muốn xoá{" "}
+              <span className="font-semibold text-slate-900">
+                {activeRegionName}
+              </span>{" "}
+              khỏi danh sách tỉnh thành đã đi?
+            </p>
+
+            <div className="mt-5 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setConfirmRemoveVisitedOpen(false)}
+                disabled={removingVisited}
+                className="rounded-lg border px-4 py-2 text-sm font-medium transition hover:bg-slate-50 disabled:opacity-60"
+              >
+                Huỷ
+              </button>
+
+              <button
+                type="button"
+                onClick={confirmRemoveVisited}
+                disabled={removingVisited}
+                className="rounded-lg bg-red-500 px-4 py-2 text-sm font-semibold text-white transition hover:bg-red-600 disabled:opacity-60"
+              >
+                {removingVisited ? "Đang xoá..." : "Xoá"}
+              </button>
+            </div>
+          </div>
         </div>
       )}
 
@@ -650,11 +1018,24 @@ export default function GoongMap() {
         onClose={() => {
           setLoginModalOpen(false);
           setPendingPlaceId(null);
+          setPendingVisitedRegion(null);
         }}
         onLoginSuccess={() => {
+          setLoginModalOpen(false);
+
+          requestUserLocationIfLoggedIn();
+
           if (pendingPlaceId) {
             openPlaceById(pendingPlaceId);
             setPendingPlaceId(null);
+            return;
+          }
+
+          if (pendingVisitedRegion) {
+            setActiveRegionKey(pendingVisitedRegion.key);
+            setActiveRegionName(pendingVisitedRegion.name);
+            setPendingVisitedRegion(null);
+            setConfirmVisitedOpen(true);
           }
         }}
       />
