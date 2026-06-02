@@ -22,68 +22,72 @@ export default function PlaceModal({
   if (!open || !place) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 p-4">
-      <div className="max-h-[90vh] w-full max-w-3xl overflow-y-auto rounded-2xl bg-white shadow-xl">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 p-4 backdrop-blur-sm">
+      <div className="max-h-[90vh] w-full max-w-3xl overflow-hidden rounded-[32px] border border-slate-200 bg-white shadow-2xl">
         {place.coverImage ? (
           <img
             src={place.coverImage}
             alt={place.name}
-            className="h-64 w-full rounded-t-2xl object-cover"
+            className="h-64 w-full object-cover"
           />
         ) : (
-          <div className="flex h-64 w-full items-center justify-center rounded-t-2xl bg-slate-100 text-sm text-slate-500">
+          <div className="flex h-64 w-full items-center justify-center bg-slate-100 text-sm text-slate-500">
             No image
           </div>
         )}
 
         <div className="p-6">
-          <p className="text-sm text-gray-500">
+          <p className="text-sm text-slate-500">
             {place.province} · {place.region}
           </p>
 
-          <h2 className="text-2xl font-bold">{place.name}</h2>
+          <h2 className="mt-3 text-3xl font-semibold tracking-tight text-slate-900">
+            {place.name}
+          </h2>
 
-          <div className="mt-5 grid grid-cols-2 rounded-xl bg-slate-100 p-1">
-            <button
-              type="button"
-              onClick={() => setTab("overview")}
-              className={
-                tab === "overview"
-                  ? "rounded-lg bg-white px-4 py-2 text-sm font-semibold shadow-sm"
-                  : "rounded-lg px-4 py-2 text-sm font-medium text-slate-500"
-              }
-            >
-              Tổng quan
-            </button>
+          <div className="mt-6 overflow-hidden rounded-full bg-slate-100 p-1 shadow-inner">
+            <div className="grid grid-cols-2 gap-1 rounded-full bg-slate-100 p-1">
+              <button
+                type="button"
+                onClick={() => setTab("overview")}
+                className={`rounded-full px-4 py-2 text-sm transition ${
+                  tab === "overview"
+                    ? "bg-white text-slate-900 shadow-sm"
+                    : "text-slate-500 hover:text-slate-700"
+                }`}
+              >
+                Tổng quan
+              </button>
 
-            <button
-              type="button"
-              onClick={() => setTab("reviews")}
-              className={
-                tab === "reviews"
-                  ? "rounded-lg bg-white px-4 py-2 text-sm font-semibold shadow-sm"
-                  : "rounded-lg px-4 py-2 text-sm font-medium text-slate-500"
-              }
-            >
-              Đánh giá
-            </button>
+              <button
+                type="button"
+                onClick={() => setTab("reviews")}
+                className={`rounded-full px-4 py-2 text-sm transition ${
+                  tab === "reviews"
+                    ? "bg-white text-slate-900 shadow-sm"
+                    : "text-slate-500 hover:text-slate-700"
+                }`}
+              >
+                Đánh giá
+              </button>
+            </div>
           </div>
 
           {tab === "overview" && (
             <>
-              <p className="mt-5 text-sm leading-6 text-gray-600">
+              <p className="mt-5 text-sm leading-7 text-slate-600">
                 {place.shortDescription}
               </p>
 
               {place.attractions.length > 0 && (
-                <section className="mt-6">
-                  <h3 className="font-semibold">Địa danh nổi bật</h3>
+                <section className="mt-6 space-y-3">
+                  <h3 className="text-lg font-semibold text-slate-900">Địa danh nổi bật</h3>
 
-                  <div className="mt-3 grid gap-3 md:grid-cols-2">
+                  <div className="mt-4 grid gap-3 md:grid-cols-2">
                     {place.attractions.map((item) => (
                       <div
                         key={item.name}
-                        className="overflow-hidden rounded-xl border"
+                        className="overflow-hidden rounded-3xl border border-slate-200 bg-slate-50 shadow-sm"
                       >
                         {item.image ? (
                           <img
@@ -93,11 +97,9 @@ export default function PlaceModal({
                           />
                         ) : null}
 
-                        <div className="p-3">
-                          <p className="font-medium">{item.name}</p>
-                          <p className="mt-1 text-sm text-gray-500">
-                            {item.description}
-                          </p>
+                        <div className="p-4">
+                          <p className="font-semibold text-slate-900">{item.name}</p>
+                          <p className="mt-1 text-sm text-slate-500">{item.description}</p>
                         </div>
                       </div>
                     ))}
@@ -106,14 +108,14 @@ export default function PlaceModal({
               )}
 
               {place.foods.length > 0 && (
-                <section className="mt-6">
-                  <h3 className="font-semibold">Món ăn nên thử</h3>
+                <section className="mt-6 space-y-3">
+                  <h3 className="text-lg font-semibold text-slate-900">Món ăn nên thử</h3>
 
-                  <div className="mt-3 grid gap-3 md:grid-cols-2">
+                  <div className="mt-4 grid gap-3 md:grid-cols-2">
                     {place.foods.map((item) => (
                       <div
                         key={item.name}
-                        className="overflow-hidden rounded-xl border"
+                        className="overflow-hidden rounded-3xl border border-slate-200 bg-slate-50 shadow-sm"
                       >
                         {item.image ? (
                           <img
@@ -123,11 +125,9 @@ export default function PlaceModal({
                           />
                         ) : null}
 
-                        <div className="p-3">
-                          <p className="font-medium">{item.name}</p>
-                          <p className="mt-1 text-sm text-gray-500">
-                            {item.description}
-                          </p>
+                        <div className="p-4">
+                          <p className="font-semibold text-slate-900">{item.name}</p>
+                          <p className="mt-1 text-sm text-slate-500">{item.description}</p>
                         </div>
                       </div>
                     ))}
@@ -139,16 +139,16 @@ export default function PlaceModal({
 
           {tab === "reviews" && <PlaceReviews placeId={place.id} />}
 
-          <div className="mt-6 flex justify-end gap-3">
+          <div className="mt-6 flex flex-col gap-3 sm:flex-row sm:justify-end">
             <button
-              className="rounded-lg border px-4 py-2 text-sm"
+              className="rounded-2xl border border-slate-200 px-4 py-2 text-sm text-slate-700 transition hover:bg-slate-100"
               onClick={onClose}
             >
               Đóng
             </button>
 
             <button
-              className="rounded-lg bg-black px-4 py-2 text-sm text-white"
+              className="rounded-2xl bg-slate-950 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-800"
               onClick={() => onAddToJourney(place)}
             >
               Add to Journey

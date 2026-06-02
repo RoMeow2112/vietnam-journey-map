@@ -164,7 +164,7 @@ export default function DataDashboard() {
 
   if (loading) {
     return (
-      <div className="rounded-2xl bg-white p-6 shadow-sm">
+      <div className="rounded-[32px] bg-white p-8 shadow-xl">
         Đang tải dữ liệu...
       </div>
     );
@@ -173,8 +173,8 @@ export default function DataDashboard() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-bold text-slate-900">Data Dashboard</h1>
-        <p className="mt-1 text-sm text-slate-500">
+        <h1 className="text-3xl font-semibold text-slate-900">Data Dashboard</h1>
+        <p className="mt-2 text-sm text-slate-500">
           Kiểm tra chất lượng dữ liệu từ Google Sheet / Supabase.
         </p>
       </div>
@@ -275,14 +275,14 @@ function StatCard({
   icon: React.ReactNode;
 }) {
   return (
-    <div className="rounded-2xl bg-white p-5 shadow-sm">
-      <div className="w-fit rounded-xl bg-emerald-50 p-2 text-emerald-600">
+    <div className="rounded-[32px] bg-white p-6 shadow-xl">
+      <div className="w-fit rounded-2xl bg-emerald-50 p-3 text-emerald-600">
         {icon}
       </div>
 
-      <p className="mt-4 text-sm text-slate-500">{title}</p>
+      <p className="mt-5 text-sm text-slate-500">{title}</p>
 
-      <div className="mt-1 flex items-end gap-1">
+      <div className="mt-2 flex items-end gap-2">
         <p className="text-3xl font-bold text-slate-900">{value}</p>
         {subText && <p className="mb-1 text-sm text-slate-500">{subText}</p>}
       </div>
@@ -301,7 +301,7 @@ function IssueSection({
   }[];
 }) {
   return (
-    <div className="rounded-2xl bg-white p-5 shadow-sm">
+    <div className="rounded-[32px] bg-white p-6 shadow-xl">
       <div className="flex items-center justify-between">
         <h2 className="font-semibold text-slate-900">{title}</h2>
         <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-medium text-slate-600">
@@ -309,16 +309,16 @@ function IssueSection({
         </span>
       </div>
 
-      <div className="mt-4 max-h-[320px] space-y-2 overflow-y-auto">
+      <div className="mt-5 max-h-[340px] space-y-3 overflow-y-auto">
         {items.length === 0 ? (
-          <div className="rounded-xl bg-emerald-50 p-4 text-sm text-emerald-700">
+          <div className="rounded-3xl bg-emerald-50 p-5 text-sm text-emerald-700">
             Không có lỗi.
           </div>
         ) : (
           items.map((item, index) => (
-            <div key={`${item.title}-${index}`} className="rounded-xl border p-3">
+            <div key={`${item.title}-${index}`} className="rounded-3xl border border-slate-200 bg-slate-50 p-4">
               <p className="font-medium text-slate-900">{item.title}</p>
-              <p className="mt-1 text-xs text-slate-500">{item.description}</p>
+              <p className="mt-1 text-sm text-slate-500">{item.description}</p>
             </div>
           ))
         )}

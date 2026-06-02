@@ -84,12 +84,9 @@ export default function AdminReviews() {
 
   return (
     <div className="space-y-6">
-      <div className="rounded-2xl border bg-white p-5 shadow-sm">
-        <h1 className="text-3xl font-bold text-slate-900">
-          Review Management
-        </h1>
-
-        <p className="mt-1 text-sm text-slate-500">
+      <div className="rounded-[32px] border border-slate-200 bg-white p-6 shadow-xl">
+        <h1 className="text-3xl font-semibold text-slate-900">Review Management</h1>
+        <p className="mt-3 text-sm leading-6 text-slate-500">
           Quản lý đánh giá cơ bản. User được review tự do, admin có quyền xoá mềm review spam hoặc không đúng sự thật.
         </p>
       </div>
@@ -103,83 +100,82 @@ export default function AdminReviews() {
         />
       </div>
 
-      <div className="rounded-2xl border bg-white p-5 shadow-sm">
-        <div className="mb-4 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-          <h2 className="text-xl font-semibold text-slate-900">
-            Review List
-          </h2>
+      <div className="rounded-[32px] border border-slate-200 bg-white p-6 shadow-xl">
+        <div className="mb-6 flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+          <div>
+            <h2 className="text-xl font-semibold text-slate-900">Review List</h2>
+            <p className="mt-1 text-sm text-slate-500">
+              Tìm kiếm và quản lý nội dung review.
+            </p>
+          </div>
 
-          <div className="relative w-full md:w-80">
-            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+          <div className="relative w-full md:w-96">
+            <Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
             <input
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Search content, user, place..."
-              className="w-full rounded-xl border py-2 pl-9 pr-4 text-sm outline-none focus:border-emerald-500"
+              className="w-full rounded-3xl border border-slate-200 bg-slate-50 py-3 pl-11 pr-4 text-sm outline-none transition focus:border-emerald-500 focus:bg-white"
             />
           </div>
         </div>
 
         {loading ? (
-          <div className="rounded-xl border border-dashed p-4 text-sm text-slate-500">
+          <div className="rounded-3xl border border-dashed border-slate-200 p-6 text-sm text-slate-500">
             Loading reviews...
           </div>
         ) : filteredReviews.length === 0 ? (
-          <div className="rounded-xl border border-dashed p-4 text-sm text-slate-500">
+          <div className="rounded-3xl border border-dashed border-slate-200 p-6 text-sm text-slate-500">
             Không có review nào.
           </div>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[900px] border-collapse text-sm">
-              <thead>
-                <tr className="border-b bg-slate-50 text-left text-slate-600">
-                  <th className="p-3">User</th>
-                  <th className="p-3">Place</th>
-                  <th className="p-3">Rating</th>
-                  <th className="p-3">Content</th>
-                  <th className="p-3">Media</th>
-                  <th className="p-3">Created</th>
-                  <th className="p-3 text-right">Action</th>
+            <table className="w-full min-w-[900px] divide-y divide-slate-200 text-sm">
+              <thead className="bg-slate-50 text-left text-slate-600">
+                <tr>
+                  <th className="p-4">User</th>
+                  <th className="p-4">Place</th>
+                  <th className="p-4">Rating</th>
+                  <th className="p-4">Content</th>
+                  <th className="p-4">Media</th>
+                  <th className="p-4">Created</th>
+                  <th className="p-4 text-right">Action</th>
                 </tr>
               </thead>
 
-              <tbody>
+              <tbody className="divide-y divide-slate-200">
                 {filteredReviews.map((review) => (
-                  <tr key={review.id} className="border-b align-top">
-                    <td className="p-3 font-medium text-slate-900">
+                  <tr key={review.id} className="transition hover:bg-slate-50">
+                    <td className="p-4 font-medium text-slate-900">
                       {review.user_name || "Ẩn danh"}
                     </td>
 
-                    <td className="p-3 text-slate-600">
+                    <td className="p-4 text-slate-600">
                       {review.place_name || review.place_id}
                     </td>
 
-                    <td className="p-3">
-                      <div className="flex items-center gap-1">
-                        <span className="font-semibold">{review.rating}</span>
+                    <td className="p-4">
+                      <div className="inline-flex items-center gap-2 rounded-full bg-emerald-50 px-3 py-1 text-sm font-semibold text-emerald-700">
+                        {review.rating}
                         <Star className="h-4 w-4 fill-yellow-400 text-yellow-400" />
                       </div>
                     </td>
 
-                    <td className="max-w-[360px] p-3 text-slate-600">
-                      <div className="line-clamp-3">
-                        {review.content || "-"}
-                      </div>
+                    <td className="max-w-[360px] p-4 text-slate-600">
+                      <div className="line-clamp-3">{review.content || "-"}</div>
                     </td>
 
-                    <td className="p-3 text-slate-600">
-                      {review.media_urls?.length || 0}
-                    </td>
+                    <td className="p-4 text-slate-600">{review.media_urls?.length || 0}</td>
 
-                    <td className="p-3 text-slate-500">
+                    <td className="p-4 text-slate-500">
                       {new Date(review.created_at).toLocaleString()}
                     </td>
 
-                    <td className="p-3 text-right">
+                    <td className="p-4 text-right">
                       <button
                         type="button"
                         onClick={() => handleDelete(review)}
-                        className="inline-flex items-center gap-2 rounded-lg border border-red-200 px-3 py-2 text-sm font-medium text-red-600 hover:bg-red-50"
+                        className="inline-flex items-center gap-2 rounded-3xl border border-red-200 bg-red-50 px-4 py-2 text-sm font-semibold text-red-600 transition hover:bg-red-100"
                       >
                         <Trash2 className="h-4 w-4" />
                         Xoá mềm

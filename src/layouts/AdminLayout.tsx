@@ -1,10 +1,11 @@
 import { NavLink, Outlet, useNavigate } from "react-router-dom";
-import { BarChart3, Home, LogOut, Users } from "lucide-react";
+import { BarChart3, Home, LogOut, MessageSquare, Users } from "lucide-react";
 import { adminSupabase } from "@/lib/supabase";
 
 const navItems = [
   { label: "Dashboard", path: "/admin", icon: Home },
   { label: "Users", path: "/admin/users", icon: Users },
+  { label: "Reviews", path: "/admin/reviews", icon: MessageSquare },
   { label: "Data Dashboard", path: "/admin/data-dashboard", icon: BarChart3 },
 ];
 

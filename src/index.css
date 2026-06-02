@@ -126,16 +126,20 @@ All colors MUST be HSL.
   .map-tooltip .maplibregl-popup-content {
     background: #2f2f2f;
     color: #ffffff;
-    padding: 5px 9px;
-    border-radius: 3px;
-    font-size: 12px;
-    line-height: 1;
-    font-weight: 500;
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.18);
+    padding: 14px 18px;
+    border-radius: 16px;
+    font-size: 16px;
+    line-height: 1.5;
+    font-weight: 600;
+    text-align: center;
+    letter-spacing: 0.01em;
+    box-shadow: 0 16px 36px rgba(0, 0, 0, 0.2);
   }
 
   .map-tooltip .maplibregl-popup-tip {
     border-top-color: #2f2f2f;
+    width: 20px;
+    height: 10px;
   }
 
   @keyframes tooltipFadeIn {

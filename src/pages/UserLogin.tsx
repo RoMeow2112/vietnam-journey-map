@@ -140,26 +140,26 @@ export default function UserLogin() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-soft">
-      <div className="container mx-auto flex min-h-screen items-center justify-center px-4 py-10">
-        <div className="w-full max-w-md rounded-3xl border bg-white p-8 shadow-xl">
+    <div className="min-h-screen bg-gradient-to-b from-slate-50 via-white to-slate-100">
+      <div className="container mx-auto flex min-h-screen items-center justify-center px-4 py-12">
+        <div className="w-full max-w-md rounded-[32px] border border-slate-200 bg-white p-8 shadow-2xl">
           <div className="mb-8 text-center">
-            <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-primary-soft text-primary">
+            <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-3xl bg-orange-50 text-orange-600 shadow-sm">
               <LogIn className="h-7 w-7" />
             </div>
 
-            <h1 className="mb-2 text-3xl font-bold text-foreground">
-              Đăng nhập
+            <h1 className="mb-2 text-3xl font-bold text-slate-900">
+              {mode === "login" ? "Đăng nhập" : "Đăng ký"}
             </h1>
 
-            <p className="text-sm leading-relaxed text-muted-foreground">
+            <p className="text-sm leading-relaxed text-slate-500">
               Tham gia cộng đồng du lịch Việt Nam và khám phá hành trình của bạn.
             </p>
           </div>
 
           <button
             onClick={loginWithGoogle}
-            className="mb-5 flex h-12 w-full items-center justify-center gap-3 rounded-xl bg-orange-500 px-4 text-sm font-semibold text-white transition hover:bg-orange-600"
+            className="mb-5 flex h-12 w-full items-center justify-center gap-3 rounded-3xl bg-slate-950 px-4 text-sm font-semibold text-white transition hover:bg-slate-800"
           >
             <svg
               xmlns="http://www.w3.org/2000/svg"
@@ -188,16 +188,12 @@ export default function UserLogin() {
           </button>
 
           <div className="mb-5 flex items-center gap-4">
-            <div className="h-px flex-1 border-t border-dashed border-slate-300" />
-
-            <div className="text-sm text-slate-400">
-              Đăng nhập bằng Email
-            </div>
-
-            <div className="h-px flex-1 border-t border-dashed border-slate-300" />
+            <div className="h-px flex-1 bg-slate-200" />
+            <div className="text-sm text-slate-400">Đăng nhập bằng Email</div>
+            <div className="h-px flex-1 bg-slate-200" />
           </div>
 
-          <div className="mb-5 grid grid-cols-2 rounded-xl bg-slate-100 p-1">
+          <div className="mb-5 grid grid-cols-2 rounded-full bg-slate-100 p-1">
             <button
               onClick={() => {
                 setMode("login");
@@ -205,8 +201,8 @@ export default function UserLogin() {
               }}
               className={
                 mode === "login"
-                  ? "rounded-lg bg-white px-4 py-2 text-sm font-semibold shadow-sm"
-                  : "rounded-lg px-4 py-2 text-sm font-medium text-slate-500"
+                  ? "rounded-full bg-white px-4 py-2 text-sm font-semibold shadow-sm"
+                  : "rounded-full px-4 py-2 text-sm font-medium text-slate-500 hover:text-slate-700"
               }
             >
               Đăng nhập
@@ -219,8 +215,8 @@ export default function UserLogin() {
               }}
               className={
                 mode === "register"
-                  ? "rounded-lg bg-white px-4 py-2 text-sm font-semibold shadow-sm"
-                  : "rounded-lg px-4 py-2 text-sm font-medium text-slate-500"
+                  ? "rounded-full bg-white px-4 py-2 text-sm font-semibold shadow-sm"
+                  : "rounded-full px-4 py-2 text-sm font-medium text-slate-500 hover:text-slate-700"
               }
             >
               Đăng ký
@@ -231,7 +227,7 @@ export default function UserLogin() {
             <input
               type="email"
               placeholder="Email"
-              className="h-12 w-full rounded-xl border border-slate-200 px-4 text-sm outline-none transition focus:border-primary"
+              className="h-12 w-full rounded-3xl border border-slate-200 bg-slate-50 px-4 text-sm outline-none transition focus:border-orange-400 focus:ring-2 focus:ring-orange-100"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
             />
@@ -239,18 +235,18 @@ export default function UserLogin() {
             <input
               type="password"
               placeholder="Mật khẩu"
-              className="h-12 w-full rounded-xl border border-slate-200 px-4 text-sm outline-none transition focus:border-primary"
+              className="h-12 w-full rounded-3xl border border-slate-200 bg-slate-50 px-4 text-sm outline-none transition focus:border-orange-400 focus:ring-2 focus:ring-orange-100"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
             />
 
             <div className="flex items-center justify-between text-sm">
               <label className="flex items-center gap-2 text-slate-500">
-                <input type="checkbox" />
+                <input type="checkbox" className="h-4 w-4 rounded border-slate-300 text-orange-500 focus:ring-orange-500" />
                 Ghi nhớ đăng nhập
               </label>
 
-              <button type="button" className="text-primary hover:underline">
+              <button type="button" className="text-orange-500 hover:underline">
                 Quên mật khẩu?
               </button>
             </div>
@@ -258,7 +254,7 @@ export default function UserLogin() {
             <button
               onClick={mode === "login" ? handleLogin : handleRegister}
               disabled={loading}
-              className="h-12 w-full rounded-xl bg-primary text-sm font-semibold text-primary-foreground transition hover:opacity-90 disabled:opacity-60"
+              className="h-12 w-full rounded-3xl bg-orange-500 text-sm font-semibold text-white transition hover:bg-orange-600 disabled:opacity-60"
             >
               {loading
                 ? "Đang xử lý..."
@@ -268,7 +264,7 @@ export default function UserLogin() {
             </button>
 
             {message && (
-              <div className="rounded-xl bg-slate-50 px-4 py-3 text-sm text-slate-700">
+              <div className="rounded-3xl bg-slate-50 px-4 py-3 text-sm text-slate-700 shadow-sm">
                 {message}
               </div>
             )}
@@ -277,7 +273,7 @@ export default function UserLogin() {
           <div className="mt-6 text-center">
             <Link
               to="/"
-              className="inline-flex items-center gap-2 text-sm font-medium text-primary hover:underline"
+              className="inline-flex items-center gap-2 text-sm font-medium text-slate-600 transition hover:text-slate-900 hover:underline"
             >
               <Map className="h-4 w-4" />
               Tiếp tục dùng bản đồ không cần đăng nhập

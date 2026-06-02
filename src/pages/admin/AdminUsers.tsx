@@ -131,18 +131,31 @@ export default function AdminUsers() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-3xl font-bold text-slate-900">Users</h1>
-        <p className="text-sm text-slate-500">
+        <h1 className="text-3xl font-semibold text-slate-900">Users</h1>
+        <p className="mt-2 text-sm text-slate-500">
           Quản lý user cho hệ thống Vietnam Discovery.
         </p>
       </div>
 
-      <div className="rounded-2xl border bg-white p-5 shadow-sm">
-        <h2 className="mb-4 text-lg font-semibold">Create user</h2>
+      <div className="rounded-[32px] border border-slate-200 bg-white p-6 shadow-xl">
+        <div className="flex flex-col gap-5 md:flex-row md:items-end md:justify-between">
+          <div>
+            <h2 className="text-lg font-semibold text-slate-900">Create user</h2>
+            <p className="mt-1 text-sm text-slate-500">Thêm người dùng mới vào hệ thống.</p>
+          </div>
 
-        <div className="grid gap-3 md:grid-cols-4">
+          <button
+            onClick={createUser}
+            className="inline-flex items-center justify-center gap-2 rounded-3xl bg-emerald-600 px-5 py-3 text-sm font-semibold text-white transition hover:bg-emerald-700"
+          >
+            <Plus className="h-4 w-4" />
+            Add User
+          </button>
+        </div>
+
+        <div className="mt-6 grid gap-4 md:grid-cols-4">
           <input
-            className="rounded-xl border px-3 py-2 text-sm"
+            className="rounded-3xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none transition focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100"
             placeholder="Email"
             value={form.email}
             onChange={(e) =>
@@ -151,7 +164,7 @@ export default function AdminUsers() {
           />
 
           <select
-            className="rounded-xl border px-3 py-2 text-sm"
+            className="rounded-3xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none transition focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100"
             value={form.role}
             onChange={(e) =>
               setForm((prev) => ({
@@ -165,7 +178,7 @@ export default function AdminUsers() {
           </select>
 
           <select
-            className="rounded-xl border px-3 py-2 text-sm"
+            className="rounded-3xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none transition focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100"
             value={form.is_active ? "true" : "false"}
             onChange={(e) =>
               setForm((prev) => ({
@@ -177,39 +190,37 @@ export default function AdminUsers() {
             <option value="true">Active</option>
             <option value="false">Inactive</option>
           </select>
-
-          <button
-            onClick={createUser}
-            className="inline-flex items-center justify-center gap-2 rounded-xl bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-700"
-          >
-            <Plus className="h-4 w-4" />
-            Add User
-          </button>
         </div>
       </div>
 
-      <div className="rounded-2xl border bg-white p-5 shadow-sm">
-        <div className="mb-4 flex items-center justify-between">
-          <h2 className="text-lg font-semibold">User list</h2>
+      <div className="rounded-[32px] border border-slate-200 bg-white p-6 shadow-xl">
+        <div className="mb-6 flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+          <div>
+            <h2 className="text-lg font-semibold text-slate-900">User list</h2>
+            <p className="mt-1 text-sm text-slate-500">Quản lý quyền và trạng thái tài khoản.</p>
+          </div>
+
           <button
             onClick={loadUsers}
-            className="rounded-xl border px-3 py-2 text-sm hover:bg-slate-50"
+            className="rounded-3xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-medium text-slate-700 transition hover:bg-slate-100"
           >
             Refresh
           </button>
         </div>
 
         {loading ? (
-          <div className="text-sm text-slate-500">Loading...</div>
+          <div className="rounded-3xl border border-dashed border-slate-200 p-6 text-sm text-slate-500">
+            Loading...
+          </div>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full text-left text-sm">
-              <thead>
-                <tr className="border-b text-slate-500">
-                  <th className="py-3">Email</th>
-                  <th className="py-3">Role</th>
-                  <th className="py-3">Status</th>
-                  <th className="py-3 text-right">Actions</th>
+            <table className="w-full min-w-[700px] divide-y divide-slate-200 text-sm text-slate-700">
+              <thead className="bg-slate-50 text-left text-slate-600">
+                <tr>
+                  <th className="px-4 py-3">Email</th>
+                  <th className="px-4 py-3">Role</th>
+                  <th className="px-4 py-3">Status</th>
+                  <th className="px-4 py-3 text-right">Actions</th>
                 </tr>
               </thead>
 
@@ -218,11 +229,11 @@ export default function AdminUsers() {
                   const isEditing = editingId === user.id;
 
                   return (
-                    <tr key={user.id} className="border-b last:border-0">
-                      <td className="py-3">
+                    <tr key={user.id} className="border-b last:border-0 transition hover:bg-slate-50">
+                      <td className="px-4 py-4">
                         {isEditing ? (
                           <input
-                            className="w-full rounded-lg border px-3 py-2"
+                            className="w-full rounded-3xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none transition focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100"
                             value={editForm.email}
                             onChange={(e) =>
                               setEditForm((prev) => ({
@@ -236,10 +247,10 @@ export default function AdminUsers() {
                         )}
                       </td>
 
-                      <td className="py-3">
+                      <td className="px-4 py-4">
                         {isEditing ? (
                           <select
-                            className="rounded-lg border px-3 py-2"
+                            className="w-full rounded-3xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none transition focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100"
                             value={editForm.role}
                             onChange={(e) =>
                               setEditForm((prev) => ({
@@ -252,16 +263,16 @@ export default function AdminUsers() {
                             <option value="admin">Admin</option>
                           </select>
                         ) : (
-                          <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-medium">
+                          <span className="inline-flex rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700">
                             {user.role}
                           </span>
                         )}
                       </td>
 
-                      <td className="py-3">
+                      <td className="px-4 py-4">
                         {isEditing ? (
                           <select
-                            className="rounded-lg border px-3 py-2"
+                            className="w-full rounded-3xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none transition focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100"
                             value={editForm.is_active ? "true" : "false"}
                             onChange={(e) =>
                               setEditForm((prev) => ({
@@ -277,8 +288,8 @@ export default function AdminUsers() {
                           <span
                             className={
                               user.is_active
-                                ? "rounded-full bg-emerald-50 px-3 py-1 text-xs font-medium text-emerald-700"
-                                : "rounded-full bg-red-50 px-3 py-1 text-xs font-medium text-red-700"
+                                ? "inline-flex rounded-full bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700"
+                                : "inline-flex rounded-full bg-red-50 px-3 py-1 text-xs font-semibold text-red-700"
                             }
                           >
                             {user.is_active ? "Active" : "Inactive"}
@@ -286,20 +297,20 @@ export default function AdminUsers() {
                         )}
                       </td>
 
-                      <td className="py-3">
+                      <td className="px-4 py-4">
                         <div className="flex justify-end gap-2">
                           {isEditing ? (
                             <>
                               <button
                                 onClick={() => updateUser(user.id)}
-                                className="rounded-lg bg-emerald-600 p-2 text-white hover:bg-emerald-700"
+                                className="inline-flex h-10 w-10 items-center justify-center rounded-3xl bg-emerald-600 text-white transition hover:bg-emerald-700"
                               >
                                 <Save className="h-4 w-4" />
                               </button>
 
                               <button
                                 onClick={cancelEdit}
-                                className="rounded-lg border p-2 hover:bg-slate-50"
+                                className="inline-flex h-10 w-10 items-center justify-center rounded-3xl border border-slate-200 text-slate-700 transition hover:bg-slate-100"
                               >
                                 <X className="h-4 w-4" />
                               </button>
@@ -308,14 +319,14 @@ export default function AdminUsers() {
                             <>
                               <button
                                 onClick={() => startEdit(user)}
-                                className="rounded-lg border p-2 hover:bg-slate-50"
+                                className="inline-flex h-10 w-10 items-center justify-center rounded-3xl border border-slate-200 text-slate-700 transition hover:bg-slate-100"
                               >
                                 <Pencil className="h-4 w-4" />
                               </button>
 
                               <button
                                 onClick={() => deleteUser(user.id)}
-                                className="rounded-lg border p-2 text-red-600 hover:bg-red-50"
+                                className="inline-flex h-10 w-10 items-center justify-center rounded-3xl border border-red-200 text-red-600 transition hover:bg-red-50"
                               >
                                 <Trash2 className="h-4 w-4" />
                               </button>
