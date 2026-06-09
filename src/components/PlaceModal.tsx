@@ -23,20 +23,20 @@ export default function PlaceModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 p-4 backdrop-blur-sm">
-      <div className="max-h-[90vh] w-full max-w-3xl overflow-hidden rounded-[32px] border border-slate-200 bg-white shadow-2xl">
+      <div className="flex max-h-[90vh] w-full max-w-3xl flex-col overflow-hidden rounded-[32px] border border-slate-200 bg-white shadow-2xl">
         {place.coverImage ? (
           <img
             src={place.coverImage}
             alt={place.name}
-            className="h-64 w-full object-cover"
+            className="h-64 w-full shrink-0 object-cover"
           />
         ) : (
-          <div className="flex h-64 w-full items-center justify-center bg-slate-100 text-sm text-slate-500">
+          <div className="flex h-64 w-full shrink-0 items-center justify-center bg-slate-100 text-sm text-slate-500">
             No image
           </div>
         )}
 
-        <div className="p-6">
+        <div className="min-h-0 flex-1 overflow-y-auto p-6">
           <p className="text-sm text-slate-500">
             {place.province} · {place.region}
           </p>
@@ -81,7 +81,9 @@ export default function PlaceModal({
 
               {place.attractions.length > 0 && (
                 <section className="mt-6 space-y-3">
-                  <h3 className="text-lg font-semibold text-slate-900">Địa danh nổi bật</h3>
+                  <h3 className="text-lg font-semibold text-slate-900">
+                    Địa danh nổi bật
+                  </h3>
 
                   <div className="mt-4 grid gap-3 md:grid-cols-2">
                     {place.attractions.map((item) => (
@@ -98,8 +100,12 @@ export default function PlaceModal({
                         ) : null}
 
                         <div className="p-4">
-                          <p className="font-semibold text-slate-900">{item.name}</p>
-                          <p className="mt-1 text-sm text-slate-500">{item.description}</p>
+                          <p className="font-semibold text-slate-900">
+                            {item.name}
+                          </p>
+                          <p className="mt-1 text-sm text-slate-500">
+                            {item.description}
+                          </p>
                         </div>
                       </div>
                     ))}
@@ -109,7 +115,9 @@ export default function PlaceModal({
 
               {place.foods.length > 0 && (
                 <section className="mt-6 space-y-3">
-                  <h3 className="text-lg font-semibold text-slate-900">Món ăn nên thử</h3>
+                  <h3 className="text-lg font-semibold text-slate-900">
+                    Món ăn nên thử
+                  </h3>
 
                   <div className="mt-4 grid gap-3 md:grid-cols-2">
                     {place.foods.map((item) => (
@@ -126,8 +134,12 @@ export default function PlaceModal({
                         ) : null}
 
                         <div className="p-4">
-                          <p className="font-semibold text-slate-900">{item.name}</p>
-                          <p className="mt-1 text-sm text-slate-500">{item.description}</p>
+                          <p className="font-semibold text-slate-900">
+                            {item.name}
+                          </p>
+                          <p className="mt-1 text-sm text-slate-500">
+                            {item.description}
+                          </p>
                         </div>
                       </div>
                     ))}

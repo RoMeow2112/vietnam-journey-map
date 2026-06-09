@@ -142,6 +142,123 @@ function lockMap(map: Map) {
   map.touchZoomRotate.disable();
 }
 
+function debugVisitedKeyMatch(geojson: RegionGeoJson, provinceKeys: string[]) {
+  const geojsonKeys = geojson.features
+    .map((feature) => feature.properties?.map_key)
+    .filter(Boolean) as string[];
+
+  const geojsonKeySet = new Set(geojsonKeys);
+
+  const matchedKeys = provinceKeys.filter((key) => geojsonKeySet.has(key));
+  const missingKeys = provinceKeys.filter((key) => !geojsonKeySet.has(key));
+
+  console.groupCollapsed("[GoongMap] visited province highlight debug");
+  console.log("DB province_key:", provinceKeys);
+  console.log("GeoJSON map_key:", geojsonKeys);
+  console.log("Matched keys:", matchedKeys);
+  console.log("Missing keys:", missingKeys);
+
+  if (missingKeys.length > 0) {
+    console.warn(
+      "[GoongMap] Một số province_key trong DB không khớp với map_key trong GeoJSON:",
+      missingKeys,
+    );
+  }
+
+  console.groupEnd();
+}
+
+function getVisitedFillColorExpression(provinceKeys: string[]): maplibregl.ExpressionSpecification {
+  return [
+    "case",
+    ["in", ["get", "map_key"], ["literal", provinceKeys]],
+    "#07ad1e",
+    ["boolean", ["feature-state", "active"], false],
+    "#0ab922",
+    ["boolean", ["feature-state", "hover"], false],
+    "#289c0b",
+    "#d1fae5",
+  ] as maplibregl.ExpressionSpecification;
+}
+
+function getVisitedFillOpacityExpression(provinceKeys: string[]): maplibregl.ExpressionSpecification {
+  return [
+    "case",
+    ["in", ["get", "map_key"], ["literal", provinceKeys]],
+    0.96,
+    ["boolean", ["feature-state", "active"], false],
+    0.86,
+    ["boolean", ["feature-state", "hover"], false],
+    0.5,
+    0.18,
+  ] as maplibregl.ExpressionSpecification;
+}
+
+function getVisitedLineColorExpression(provinceKeys: string[]): maplibregl.ExpressionSpecification {
+  return [
+    "case",
+    ["in", ["get", "map_key"], ["literal", provinceKeys]],
+    "#02990a",
+    ["boolean", ["feature-state", "active"], false],
+    "#02740b",
+    ["boolean", ["feature-state", "hover"], false],
+    "#0da00d",
+    "#10b981",
+  ] as maplibregl.ExpressionSpecification;
+}
+
+function getVisitedLineWidthExpression(provinceKeys: string[]): maplibregl.ExpressionSpecification {
+  return [
+    "case",
+    ["in", ["get", "map_key"], ["literal", provinceKeys]],
+    2.5,
+    ["boolean", ["feature-state", "active"], false],
+    2.8,
+    ["boolean", ["feature-state", "hover"], false],
+    2,
+    1,
+  ] as maplibregl.ExpressionSpecification;
+}
+
+function getVisitedGlowColorExpression(provinceKeys: string[]): maplibregl.ExpressionSpecification {
+  return [
+    "case",
+    ["in", ["get", "map_key"], ["literal", provinceKeys]],
+    "#02c902",
+    ["boolean", ["feature-state", "active"], false],
+    "#288d00",
+    ["boolean", ["feature-state", "hover"], false],
+    "#fbbf24",
+    "#22c55e",
+  ] as maplibregl.ExpressionSpecification;
+}
+
+function getVisitedGlowWidthExpression(provinceKeys: string[]): maplibregl.ExpressionSpecification {
+  return [
+    "case",
+    ["in", ["get", "map_key"], ["literal", provinceKeys]],
+    4.5,
+    ["boolean", ["feature-state", "active"], false],
+    4,
+    ["boolean", ["feature-state", "hover"], false],
+    3,
+    0,
+  ] as maplibregl.ExpressionSpecification;
+}
+
+function getVisitedGlowOpacityExpression(provinceKeys: string[]): maplibregl.ExpressionSpecification {
+  return [
+    "case",
+    ["in", ["get", "map_key"], ["literal", provinceKeys]],
+    1,
+    ["boolean", ["feature-state", "active"], false],
+    0.95,
+    ["boolean", ["feature-state", "hover"], false],
+    0.65,
+    0,
+  ] as maplibregl.ExpressionSpecification;
+}
+
 export default function GoongMap() {
   const mapContainerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<Map | null>(null);
@@ -244,24 +361,81 @@ export default function GoongMap() {
 
   const applyVisitedState = useCallback((provinceKeys: string[]) => {
     const map = mapRef.current;
+    const geojson = geojsonRef.current;
 
-    if (!map) return;
+    if (!map || !geojson) return;
 
     const source = map.getSource(REGION_SOURCE_ID);
 
     if (!source) return;
 
-    provinceKeys.forEach((key) => {
+    debugVisitedKeyMatch(geojson, provinceKeys);
+
+    const visitedSet = new Set(provinceKeys);
+
+    geojson.features.forEach((feature) => {
+      const key = feature.properties?.map_key;
+
+      if (!key) return;
+
       map.setFeatureState(
         {
           source: REGION_SOURCE_ID,
           id: key,
         },
         {
-          visited: true,
+          visited: visitedSet.has(key),
         },
       );
     });
+
+    if (map.getLayer(REGION_FILL_LAYER_ID)) {
+      map.setPaintProperty(
+        REGION_FILL_LAYER_ID,
+        "fill-color",
+        getVisitedFillColorExpression(provinceKeys),
+      );
+
+      map.setPaintProperty(
+        REGION_FILL_LAYER_ID,
+        "fill-opacity",
+        getVisitedFillOpacityExpression(provinceKeys),
+      );
+    }
+
+    if (map.getLayer(REGION_LINE_LAYER_ID)) {
+      map.setPaintProperty(
+        REGION_LINE_LAYER_ID,
+        "line-color",
+        getVisitedLineColorExpression(provinceKeys),
+      );
+
+      map.setPaintProperty(
+        REGION_LINE_LAYER_ID,
+        "line-width",
+        getVisitedLineWidthExpression(provinceKeys),
+      );
+    }
+
+    if (map.getLayer(REGION_GLOW_LAYER_ID)) {
+      map.setPaintProperty(
+        REGION_GLOW_LAYER_ID,
+        "line-color",
+        getVisitedGlowColorExpression(provinceKeys),
+      );
+
+      map.setPaintProperty(
+        REGION_GLOW_LAYER_ID,
+        "line-width",
+        getVisitedGlowWidthExpression(provinceKeys),
+      );
+
+      map.setPaintProperty(
+        REGION_GLOW_LAYER_ID,
+        "line-opacity",
+        getVisitedGlowOpacityExpression(provinceKeys),
+      );
+    }
   }, []);
 
   const removeVisitedState = useCallback((provinceKey: string) => {
@@ -292,6 +466,7 @@ export default function GoongMap() {
 
       if (!session?.user) {
         setVisitedProvinceKeys([]);
+        applyVisitedState([]);
         return;
       }
 
@@ -389,12 +564,14 @@ export default function GoongMap() {
 
       if (error) throw error;
 
-      setVisitedProvinceKeys((prev) => {
-        if (prev.includes(activeRegionKey)) return prev;
-        return [...prev, activeRegionKey];
-      });
+      const nextVisitedProvinceKeys = visitedProvinceKeys.includes(
+        activeRegionKey,
+      )
+        ? visitedProvinceKeys
+        : [...visitedProvinceKeys, activeRegionKey];
 
-      applyVisitedState([activeRegionKey]);
+      setVisitedProvinceKeys(nextVisitedProvinceKeys);
+      applyVisitedState(nextVisitedProvinceKeys);
 
       window.dispatchEvent(new Event("visited-provinces-updated"));
 
@@ -532,26 +709,8 @@ export default function GoongMap() {
         type: "fill",
         source: REGION_SOURCE_ID,
         paint: {
-          "fill-color": [
-            "case",
-            ["boolean", ["feature-state", "active"], false],
-            "#059669",
-            ["boolean", ["feature-state", "visited"], false],
-            "#f97316",
-            ["boolean", ["feature-state", "hover"], false],
-            "#34d399",
-            "#d1fae5",
-          ],
-          "fill-opacity": [
-            "case",
-            ["boolean", ["feature-state", "active"], false],
-            0.86,
-            ["boolean", ["feature-state", "visited"], false],
-            0.96,
-            ["boolean", ["feature-state", "hover"], false],
-            0.5,
-            0.18,
-          ],
+          "fill-color": getVisitedFillColorExpression([]),
+          "fill-opacity": getVisitedFillOpacityExpression([]),
         },
       });
 
@@ -560,36 +719,9 @@ export default function GoongMap() {
         type: "line",
         source: REGION_SOURCE_ID,
         paint: {
-          "line-color": [
-            "case",
-            ["boolean", ["feature-state", "active"], false],
-            "#065f46",
-            ["boolean", ["feature-state", "visited"], false],
-            "#9a3412",
-            ["boolean", ["feature-state", "hover"], false],
-            "#10b981",
-            "#22c55e",
-          ],
-          "line-width": [
-            "case",
-            ["boolean", ["feature-state", "active"], false],
-            5.5,
-            ["boolean", ["feature-state", "visited"], false],
-            5,
-            ["boolean", ["feature-state", "hover"], false],
-            4,
-            0,
-          ],
-          "line-opacity": [
-            "case",
-            ["boolean", ["feature-state", "active"], false],
-            0.95,
-            ["boolean", ["feature-state", "visited"], false],
-            0.9,
-            ["boolean", ["feature-state", "hover"], false],
-            0.65,
-            0,
-          ],
+          "line-color": getVisitedGlowColorExpression([]),
+          "line-width": getVisitedGlowWidthExpression([]),
+          "line-opacity": getVisitedGlowOpacityExpression([]),
           "line-blur": [
             "case",
             ["boolean", ["feature-state", "visited"], false],
@@ -604,26 +736,8 @@ export default function GoongMap() {
         type: "line",
         source: REGION_SOURCE_ID,
         paint: {
-          "line-color": [
-            "case",
-            ["boolean", ["feature-state", "active"], false],
-            "#064e3b",
-            ["boolean", ["feature-state", "visited"], false],
-            "#7c2d12",
-            ["boolean", ["feature-state", "hover"], false],
-            "#047857",
-            "#10b981",
-          ],
-          "line-width": [
-            "case",
-            ["boolean", ["feature-state", "active"], false],
-            3.8,
-            ["boolean", ["feature-state", "visited"], false],
-            3.6,
-            ["boolean", ["feature-state", "hover"], false],
-            3,
-            1,
-          ],
+          "line-color": getVisitedLineColorExpression([]),
+          "line-width": getVisitedLineWidthExpression([]),
           "line-opacity": [
             "case",
             ["boolean", ["feature-state", "active"], false],
@@ -638,9 +752,9 @@ export default function GoongMap() {
       });
 
       map.addSource(USER_LOCATION_SOURCE_ID, {
-  type: "geojson",
-  data: emptyUserLocationGeoJson(),
-});
+        type: "geojson",
+        data: emptyUserLocationGeoJson(),
+      });
 
       map.addLayer({
         id: USER_LOCATION_PULSE_LAYER_ID,

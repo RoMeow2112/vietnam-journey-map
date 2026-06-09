@@ -11,6 +11,7 @@ import UserLogin from "./pages/UserLogin";
 import NotFound from "./pages/NotFound";
 import AuthCallback from "./pages/AuthCallback";
 import AdminReviews from "@/pages/admin/AdminReviews";
+import UserProfile from "@/pages/UserProfile";
 
 export default function App() {
   return (
@@ -22,6 +23,7 @@ export default function App() {
     <Route path="/auth/callback" element={<AuthCallback />} />
 
     <Route path="/admin/login" element={<AdminLogin />} />
+    <Route path="/profile" element={<UserProfile />} />
 
     <Route element={<AdminGuard />}>
       <Route path="/admin" element={<AdminLayout />}>
