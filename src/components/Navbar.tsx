@@ -45,6 +45,23 @@ function normalizeSearchText(value: string) {
     .trim();
 }
 
+function splitSearchTerms(value: string, preserveDiacritics = false) {
+  const text = preserveDiacritics
+    ? value.toLowerCase().normalize("NFC")
+    : normalizeSearchText(value);
+
+  return text
+    .replace(
+      preserveDiacritics
+        ? /[^\p{L}\p{N}\s]+/gu
+        : /[^a-z0-9\s]+/g,
+      " ",
+    )
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean);
+}
+
 function safeArray<T>(value: unknown): T[] {
   return Array.isArray(value) ? (value as T[]) : [];
 }
@@ -66,7 +83,7 @@ function mapPlaceRowToDetail(row: PlaceRow): PlaceDetail {
   } as PlaceDetail;
 }
 
-function getSearchableText(place: SearchPlace) {
+function getSearchableText(place: SearchPlace, preserveDiacritics = false) {
   const attractionsText = Array.isArray(place.attractions)
     ? place.attractions
         .map((item) => `${item.name || ""} ${item.description || ""}`)
@@ -79,18 +96,19 @@ function getSearchableText(place: SearchPlace) {
         .join(" ")
     : "";
 
-  return normalizeSearchText(
-    [
-      place.name,
-      place.province,
-      place.region,
-      place.shortDescription,
-      attractionsText,
-      foodsText,
-    ]
-      .filter(Boolean)
-      .join(" "),
-  );
+  const text = [
+    place.name,
+    place.province,
+    place.region,
+    attractionsText,
+    foodsText,
+  ]
+    .filter(Boolean)
+    .join(" ");
+
+  return preserveDiacritics
+    ? text.toLowerCase().normalize("NFC").trim()
+    : normalizeSearchText(text);
 }
 
 export function Navbar() {
@@ -245,32 +263,53 @@ export function Navbar() {
   }
 
   const searchResults = useMemo(() => {
-    const keyword = normalizeSearchText(searchKeyword);
+    const isAccentSearch = /[ăâđêôơưáàảãạấầẩẫậắằẳẵặếềểễệíìỉĩịóòỏõọốồổỗộớờởỡợúùủũụứừửữựýỳỷỹỵĂÂĐÊÔƠƯ]/.test(searchKeyword);
+    const keyword = isAccentSearch
+      ? searchKeyword.toLowerCase().trim()
+      : normalizeSearchText(searchKeyword);
 
     if (keyword.length < 1) return [];
 
-    const exactMatches = places.filter((place) => {
+    const exactNameMatches = places.filter((place) => {
       const name = normalizeSearchText(place.name || "");
-      const province = normalizeSearchText(place.province || "");
-
-      return name === keyword || province === keyword;
+      return name === keyword;
     });
 
-    if (exactMatches.length > 0) {
-      return exactMatches.slice(0, 1);
+    if (exactNameMatches.length > 0) {
+      return exactNameMatches.slice(0, 8);
     }
 
-    const startsWithMatches = places.filter((place) => {
-      const name = normalizeSearchText(place.name || "");
+    const exactProvinceMatches = places.filter((place) => {
       const province = normalizeSearchText(place.province || "");
-
-      return name.startsWith(keyword) || province.startsWith(keyword);
+      return province === keyword;
     });
 
-    const includesMatches = places.filter((place) => {
-      const searchableText = getSearchableText(place);
+    if (exactProvinceMatches.length > 0) {
+      return exactProvinceMatches.slice(0, 8);
+    }
 
-      return searchableText.includes(keyword);
+    const startsWithNameMatches = places.filter((place) => {
+      const name = normalizeSearchText(place.name || "");
+      return name.startsWith(keyword);
+    });
+
+    if (startsWithNameMatches.length > 0) {
+      return startsWithNameMatches.slice(0, 8);
+    }
+
+    const startsWithProvinceMatches = places.filter((place) => {
+      const province = normalizeSearchText(place.province || "");
+      return province.startsWith(keyword);
+    });
+
+    const startsWithMatches = [...startsWithNameMatches, ...startsWithProvinceMatches];
+
+    const searchTerms = splitSearchTerms(keyword, isAccentSearch);
+
+    const includesMatches = places.filter((place) => {
+      const searchableText = getSearchableText(place, isAccentSearch);
+      const placeTerms = splitSearchTerms(searchableText, isAccentSearch);
+      return searchTerms.every((term) => placeTerms.includes(term));
     });
 
     const uniqueMap = new Map<string, SearchPlace>();
@@ -429,16 +468,6 @@ export function Navbar() {
                       <div className="text-sm font-semibold text-slate-900">
                         {place.name}
                       </div>
-
-                      <div className="mt-1 text-xs text-slate-500">
-                        {place.province} · {place.region}
-                      </div>
-
-                      {place.shortDescription && (
-                        <div className="mt-1 line-clamp-1 text-xs text-slate-400">
-                          {place.shortDescription}
-                        </div>
-                      )}
                     </button>
                   ))}
               </div>
