@@ -49,6 +49,33 @@ type UserLocation = {
   lat: number;
 };
 
+type FavoritePlace = {
+  id: string;
+  name: string;
+  province: string;
+  region: string;
+  createdAt: string;
+};
+
+type FavoritePlaceQueryRow = {
+  place_id: string;
+  created_at: string;
+  places:
+    | {
+        id: string;
+        name: string;
+        province: string;
+        region: string;
+      }
+    | Array<{
+        id: string;
+        name: string;
+        province: string;
+        region: string;
+      }>
+    | null;
+};
+
 type UserLocationGeoJson = GeoJSON.FeatureCollection<
   GeoJSON.Point,
   {
@@ -287,6 +314,14 @@ export default function GoongMap() {
   const [modalOpen, setModalOpen] = useState(false);
   const [loadingDetailId, setLoadingDetailId] = useState<string | null>(null);
 
+  // One favorite list per authenticated account.
+  const [favoritePlaceIds, setFavoritePlaceIds] = useState<string[]>([]);
+  const [favoritePlaces, setFavoritePlaces] = useState<FavoritePlace[]>([]);
+  const [loadingFavorites, setLoadingFavorites] = useState(false);
+  const [pendingFavoritePlace, setPendingFavoritePlace] =
+    useState<PlaceDetail | null>(null);
+  const [favoriteUpdating, setFavoriteUpdating] = useState(false);
+
   const [loginModalOpen, setLoginModalOpen] = useState(false);
   const [pendingPlaceId, setPendingPlaceId] = useState<string | null>(null);
 
@@ -486,6 +521,85 @@ export default function GoongMap() {
     }
   }, [applyVisitedState]);
 
+  const loadFavoritePlaces = useCallback(async (userId?: string) => {
+    setLoadingFavorites(true);
+
+    try {
+      let activeUserId = userId;
+
+      if (!activeUserId) {
+        const {
+          data: { session },
+        } = await supabase.auth.getSession();
+
+        activeUserId = session?.user?.id;
+      }
+
+      if (!activeUserId) {
+        setFavoritePlaceIds([]);
+        setFavoritePlaces([]);
+        return;
+      }
+
+      // Step 1: Load every favorite place id of the current account.
+      // This query is not related to the currently selected province.
+      const { data: favoriteRows, error: favoriteError } = await supabase
+        .from("user_favorite_places")
+        .select("place_id, created_at")
+        .eq("user_id", activeUserId)
+        .order("created_at", { ascending: false });
+
+      if (favoriteError) throw favoriteError;
+
+      const rows = favoriteRows ?? [];
+      const placeIds = rows.map((item) => item.place_id as string);
+
+      if (placeIds.length === 0) {
+        setFavoritePlaceIds([]);
+        setFavoritePlaces([]);
+        return;
+      }
+
+      // Step 2: Load full information for all favorite places.
+      // Using .in() ensures the result contains favorites from every province.
+      const { data: placeRows, error: placesError } = await supabase
+        .from("places")
+        .select("id, name, province, region")
+        .in("id", placeIds);
+
+      if (placesError) throw placesError;
+
+      const placeById = new Map(
+        (placeRows ?? []).map((place) => [place.id as string, place]),
+      );
+
+      const normalizedFavorites: FavoritePlace[] = rows.flatMap((item) => {
+        const relatedPlace = placeById.get(item.place_id as string);
+
+        if (!relatedPlace) return [];
+
+        return [
+          {
+            id: relatedPlace.id as string,
+            name: relatedPlace.name as string,
+            province: relatedPlace.province as string,
+            region: relatedPlace.region as string,
+            createdAt: item.created_at as string,
+          },
+        ];
+      });
+
+      setFavoritePlaceIds(placeIds);
+      setFavoritePlaces(normalizedFavorites);
+    } catch (error) {
+      console.error("Cannot load favorite places:", error);
+      setFavoritePlaceIds([]);
+      setFavoritePlaces([]);
+    } finally {
+      setLoadingFavorites(false);
+    }
+  }, []);
+
   async function openPlaceById(id: string) {
     try {
       setLoadingDetailId(id);
@@ -513,8 +627,118 @@ export default function GoongMap() {
     await openPlaceById(id);
   }
 
-  function handleShowRegionDetail() {
+  async function savePlaceToFavorites(place: PlaceDetail) {
+    try {
+      setFavoriteUpdating(true);
+
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+
+      if (!session?.user) {
+        setPendingFavoritePlace(place);
+        setLoginModalOpen(true);
+        return;
+      }
+
+      const { error } = await supabase.from("user_favorite_places").upsert(
+        {
+          user_id: session.user.id,
+          place_id: place.id,
+        },
+        {
+          onConflict: "user_id,place_id",
+          ignoreDuplicates: true,
+        },
+      );
+
+      if (error) throw error;
+
+      setFavoritePlaceIds((currentIds) =>
+        currentIds.includes(place.id) ? currentIds : [place.id, ...currentIds],
+      );
+
+      await loadFavoritePlaces(session.user.id);
+      setPendingFavoritePlace(null);
+
+      window.alert(`Đã thêm ${place.name} vào danh sách địa điểm yêu thích.`);
+    } catch (error) {
+      console.error("Cannot add place to favorites:", error);
+      window.alert("Không thể thêm địa điểm vào danh sách yêu thích.");
+    } finally {
+      setFavoriteUpdating(false);
+    }
+  }
+
+  async function removePlaceFromFavorites(place: PlaceDetail) {
+    try {
+      setFavoriteUpdating(true);
+
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+
+      if (!session?.user) {
+        setLoginModalOpen(true);
+        return;
+      }
+
+      const { error } = await supabase
+        .from("user_favorite_places")
+        .delete()
+        .eq("user_id", session.user.id)
+        .eq("place_id", place.id);
+
+      if (error) throw error;
+
+      setFavoritePlaceIds((currentIds) =>
+        currentIds.filter((placeId) => placeId !== place.id),
+      );
+      setFavoritePlaces((currentPlaces) =>
+        currentPlaces.filter((favoritePlace) => favoritePlace.id !== place.id),
+      );
+
+      // Update local state only: remove exactly the selected place and keep
+      // every other favorite item unchanged. Avoid reloading the whole list
+      // here because an overlapping request can temporarily clear the UI.
+      window.alert(`Đã xóa ${place.name} khỏi danh sách địa điểm yêu thích.`);
+    } catch (error) {
+      console.error("Cannot remove place from favorites:", error);
+      window.alert("Không thể xóa địa điểm khỏi danh sách yêu thích.");
+    } finally {
+      setFavoriteUpdating(false);
+    }
+  }
+
+  async function handleAddToFavorites(place: PlaceDetail) {
+    const loggedIn = await isLoggedIn();
+
+    if (!loggedIn) {
+      setPendingFavoritePlace(place);
+      setLoginModalOpen(true);
+      return;
+    }
+
+    await savePlaceToFavorites(place);
+  }
+
+  async function handleRemoveFromFavorites(place: PlaceDetail) {
+    const loggedIn = await isLoggedIn();
+
+    if (!loggedIn) {
+      setLoginModalOpen(true);
+      return;
+    }
+
+    await removePlaceFromFavorites(place);
+  }
+
+  async function handleShowRegionDetail() {
     setShowRegionDetail(true);
+
+    // Always reload the complete wishlist of the current account.
+    // Do not filter by activeRegionKey or regionPlaces.
+    await loadFavoritePlaces();
   }
 
   async function handleMarkVisited() {
@@ -650,25 +874,53 @@ export default function GoongMap() {
 
   useEffect(() => {
     loadVisitedProvinces();
+    loadFavoritePlaces();
     requestUserLocationIfLoggedIn();
 
-    window.addEventListener("visited-provinces-updated", loadVisitedProvinces);
+    // Event listeners receive an Event object as their first argument.
+    // Use wrappers so that Event is not accidentally passed as userId.
+    const handleVisitedProvincesUpdated = () => {
+      void loadVisitedProvinces();
+    };
+
+    const handleFavoritePlacesUpdated = () => {
+      void loadFavoritePlaces();
+    };
+
+    window.addEventListener(
+      "visited-provinces-updated",
+      handleVisitedProvincesUpdated,
+    );
+    window.addEventListener(
+      "favorite-places-updated",
+      handleFavoritePlacesUpdated,
+    );
 
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange(() => {
-      loadVisitedProvinces();
-      requestUserLocationIfLoggedIn();
+    } = supabase.auth.onAuthStateChange((_event, session) => {
+      // Clear only when the authenticated account changes, then load
+      // the wishlist that belongs to the new account.
+      setFavoritePlaceIds([]);
+      setFavoritePlaces([]);
+
+      void loadVisitedProvinces();
+      void loadFavoritePlaces(session?.user?.id);
+      void requestUserLocationIfLoggedIn();
     });
 
     return () => {
       window.removeEventListener(
         "visited-provinces-updated",
-        loadVisitedProvinces,
+        handleVisitedProvincesUpdated,
+      );
+      window.removeEventListener(
+        "favorite-places-updated",
+        handleFavoritePlacesUpdated,
       );
       subscription.unsubscribe();
     };
-  }, [loadVisitedProvinces, requestUserLocationIfLoggedIn]);
+  }, [loadVisitedProvinces, loadFavoritePlaces, requestUserLocationIfLoggedIn]);
 
   useEffect(() => {
     if (!mapContainerRef.current || mapRef.current) return;
@@ -837,7 +1089,10 @@ export default function GoongMap() {
           },
         );
 
-        popup.setLngLat(event.lngLat).setHTML(`<span>${name}</span>`).addTo(map);
+        popup
+          .setLngLat(event.lngLat)
+          .setHTML(`<span>${name}</span>`)
+          .addTo(map);
       });
 
       map.on("mouseleave", REGION_FILL_LAYER_ID, () => {
@@ -859,47 +1114,52 @@ export default function GoongMap() {
         hoveredRegionRef.current = null;
       });
 
-      map.on("click", REGION_FILL_LAYER_ID, async (event: MapLayerMouseEvent) => {
-        const feature = event.features?.[0] as RegionFeature | undefined;
+      map.on(
+        "click",
+        REGION_FILL_LAYER_ID,
+        async (event: MapLayerMouseEvent) => {
+          const feature = event.features?.[0] as RegionFeature | undefined;
 
-        if (!feature?.geometry) return;
+          if (!feature?.geometry) return;
 
-        const key = feature.properties?.map_key;
-        const name = feature.properties?.name || "";
+          const key = feature.properties?.map_key;
+          const name = feature.properties?.name || "";
 
-        if (!key) return;
+          if (!key) return;
 
-        clearActiveRegion(map, geojson);
+          clearActiveRegion(map, geojson);
 
-        map.setFeatureState(
-          {
-            source: REGION_SOURCE_ID,
-            id: key,
-          },
-          {
-            active: true,
-          },
-        );
+          map.setFeatureState(
+            {
+              source: REGION_SOURCE_ID,
+              id: key,
+            },
+            {
+              active: true,
+            },
+          );
 
-        setActiveRegionKey(key);
-        setActiveRegionName(name);
-        setLoadingRegion(true);
-        setShowRegionDetail(false);
-        setConfirmVisitedOpen(false);
-        setConfirmRemoveVisitedOpen(false);
+          setActiveRegionKey(key);
+          setActiveRegionName(name);
+          setLoadingRegion(true);
+          setShowRegionDetail(false);
+          setConfirmVisitedOpen(false);
+          setConfirmRemoveVisitedOpen(false);
 
-        try {
-          const places = cacheRef.current[key] || (await getPlacesByRegion(key));
+          try {
+            const places =
+              cacheRef.current[key] || (await getPlacesByRegion(key));
 
-          cacheRef.current[key] = places;
-          setRegionPlaces(places);
-        } catch (error: unknown) {
-          console.error(error);
-          setRegionPlaces([]);
-        } finally {
-          setLoadingRegion(false);
-        }
-      });
+            cacheRef.current[key] = places;
+            setRegionPlaces(places);
+          } catch (error: unknown) {
+            console.error(error);
+            setRegionPlaces([]);
+          } finally {
+            setLoadingRegion(false);
+          }
+        },
+      );
     });
 
     return () => {
@@ -998,7 +1258,53 @@ export default function GoongMap() {
           )}
 
           {showRegionDetail && (
-            <div className="mt-4 rounded-xl bg-white p-3 text-slate-900">
+            <div className="mt-4 space-y-4 rounded-xl bg-white p-3 text-slate-900">
+              <div>
+                <div className="mb-3 flex items-center gap-2">
+                  <MapPinned className="h-4 w-4 text-amber-500" />
+
+                  <p className="text-sm font-semibold">Địa điểm yêu thích</p>
+                </div>
+
+                <p className="mb-3 text-xs text-slate-500">
+                  {loadingFavorites
+                    ? "Đang tải danh sách yêu thích..."
+                    : `${favoritePlaces.length} địa điểm đã thêm vào danh sách yêu thích`}
+                </p>
+
+                <div className="max-h-[220px] space-y-2 overflow-y-auto pr-1">
+                  {!loadingFavorites && favoritePlaces.length === 0 && (
+                    <div className="rounded-xl border border-dashed p-4 text-sm leading-6 text-slate-500">
+                      Bạn chưa thêm địa điểm nào vào danh sách yêu thích.
+                    </div>
+                  )}
+
+                  {favoritePlaces.map((place) => (
+                    <button
+                      key={`favorite-${place.id}`}
+                      type="button"
+                      onClick={() => requireLoginThenOpenPlace(place.id)}
+                      className="w-full rounded-xl border border-amber-200 bg-amber-50 p-3 text-left transition hover:border-amber-400 hover:bg-amber-100"
+                    >
+                      <p className="font-semibold text-slate-900">
+                        {place.name}
+                      </p>
+
+                      <p className="mt-1 text-xs text-slate-500">
+                        {place.province} · {place.region}
+                      </p>
+
+                      {loadingDetailId === place.id && (
+                        <p className="mt-1 text-xs text-amber-600">
+                          Đang tải chi tiết...
+                        </p>
+                      )}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="border-t border-slate-200 pt-4">
               <div className="mb-3 flex items-center gap-2">
                 <MapPinned className="h-4 w-4 text-emerald-600" />
 
@@ -1040,6 +1346,7 @@ export default function GoongMap() {
                     )}
                   </button>
                 ))}
+                </div>
               </div>
             </div>
           )}
@@ -1124,7 +1431,12 @@ export default function GoongMap() {
         open={modalOpen}
         place={selectedPlace}
         onClose={() => setModalOpen(false)}
-        onAddToJourney={() => setModalOpen(false)}
+        onAddToFavorites={handleAddToFavorites}
+        onRemoveFromFavorites={handleRemoveFromFavorites}
+        isFavorite={
+          selectedPlace ? favoritePlaceIds.includes(selectedPlace.id) : false
+        }
+        favoriteUpdating={favoriteUpdating}
       />
 
       <LoginRequiredModal
@@ -1133,14 +1445,23 @@ export default function GoongMap() {
           setLoginModalOpen(false);
           setPendingPlaceId(null);
           setPendingVisitedRegion(null);
+          setPendingFavoritePlace(null);
         }}
-        onLoginSuccess={() => {
+        onLoginSuccess={async () => {
           setLoginModalOpen(false);
 
-          requestUserLocationIfLoggedIn();
+          await requestUserLocationIfLoggedIn();
+          await loadFavoritePlaces();
+
+          if (pendingFavoritePlace) {
+            const placeToFavorite = pendingFavoritePlace;
+            setPendingFavoritePlace(null);
+            await savePlaceToFavorites(placeToFavorite);
+            return;
+          }
 
           if (pendingPlaceId) {
-            openPlaceById(pendingPlaceId);
+            await openPlaceById(pendingPlaceId);
             setPendingPlaceId(null);
             return;
           }
