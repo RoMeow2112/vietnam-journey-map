@@ -92,9 +92,24 @@ const USER_LOCATION_SOURCE_ID = "user-location";
 const USER_LOCATION_PULSE_LAYER_ID = "user-location-pulse";
 const USER_LOCATION_DOT_LAYER_ID = "user-location-dot";
 
+const MAP_MIN_ZOOM = 3.5;
+const MAP_MAX_ZOOM = 8;
+const MAP_ZOOM_STEP = 0.1;
+
 const VN_FIT_BOUNDS: [[number, number], [number, number]] = [
   [101.5, 7.5],
   [111.5, 24.5],
+];
+
+// Không dùng VN_FIT_BOUNDS làm maxBounds vì bounds này quá hẹp.
+// MapLibre sẽ tự ép mức zoom tối thiểu và khiến slider không thể zoom out.
+// Bounds rộng hơn này vẫn giới hạn việc kéo map quanh khu vực Việt Nam,
+// nhưng cho phép thanh trượt giảm xuống MAP_MIN_ZOOM.
+const MAP_DRAG_BOUNDS: [[number, number], [number, number]] = [
+  // Siết biên vừa đủ để hạn chế khoảng trắng khi kéo tới mép,
+  // nhưng vẫn đủ rộng để không làm MapLibre ép zoom tối thiểu trở lại.
+  [78, -8],
+  [138, 36],
 ];
 
 const BLANK_VN_STYLE: maplibregl.StyleSpecification = {
@@ -162,7 +177,7 @@ function clearActiveRegion(map: Map, geojson: RegionGeoJson) {
 function lockMap(map: Map) {
   map.scrollZoom.disable();
   map.boxZoom.disable();
-  map.dragPan.disable();
+  map.dragPan.enable();
   map.dragRotate.disable();
   map.doubleClickZoom.disable();
   map.keyboard.disable();
@@ -329,9 +344,36 @@ export default function GoongMap() {
   const [locationPermissionDenied, setLocationPermissionDenied] =
     useState(false);
 
+  const [mapZoom, setMapZoom] = useState(5);
+
   const activeRegionVisited = activeRegionKey
     ? visitedProvinceKeys.includes(activeRegionKey)
     : false;
+
+  function handleMapZoomChange(value: number) {
+    const map = mapRef.current;
+    const nextZoom = Math.min(MAP_MAX_ZOOM, Math.max(MAP_MIN_ZOOM, value));
+
+    setMapZoom(nextZoom);
+
+    if (!map) return;
+
+    map.jumpTo({ zoom: nextZoom });
+  }
+
+  function handleZoomSliderStart(event: React.PointerEvent<HTMLDivElement>) {
+    event.stopPropagation();
+
+    const map = mapRef.current;
+    map?.dragPan.disable();
+  }
+
+  function handleZoomSliderEnd(event?: React.PointerEvent<HTMLDivElement>) {
+    event?.stopPropagation();
+
+    const map = mapRef.current;
+    map?.dragPan.enable();
+  }
 
   async function isLoggedIn() {
     const {
@@ -932,6 +974,8 @@ export default function GoongMap() {
       zoom: 5,
       attributionControl: false,
       interactive: true,
+      maxBounds: MAP_DRAG_BOUNDS,
+      renderWorldCopies: false,
     });
 
     mapRef.current = map;
@@ -1040,9 +1084,19 @@ export default function GoongMap() {
         duration: 0,
       });
 
-      const lockedZoom = map.getZoom();
-      map.setMinZoom(lockedZoom);
-      map.setMaxZoom(lockedZoom);
+      const initialZoom = Math.min(
+        MAP_MAX_ZOOM,
+        Math.max(MAP_MIN_ZOOM, map.getZoom()),
+      );
+
+      map.setMinZoom(MAP_MIN_ZOOM);
+      map.setMaxZoom(MAP_MAX_ZOOM);
+      map.setZoom(initialZoom);
+      setMapZoom(initialZoom);
+
+      map.on("zoom", () => {
+        setMapZoom(map.getZoom());
+      });
 
       await loadVisitedProvinces();
       await requestUserLocationIfLoggedIn();
@@ -1171,6 +1225,63 @@ export default function GoongMap() {
   return (
     <div className="relative overflow-hidden bg-white">
       <div ref={mapContainerRef} className="h-[calc(100vh-76px)] w-full" />
+
+      <div
+        className="absolute bottom-5 right-4 z-20 w-[230px] rounded-2xl border border-slate-200 bg-white/95 px-4 py-3 shadow-[0_12px_35px_rgba(15,23,42,0.18)] backdrop-blur"
+        onPointerDown={handleZoomSliderStart}
+        onPointerUp={handleZoomSliderEnd}
+        onPointerCancel={handleZoomSliderEnd}
+        onPointerLeave={(event) => {
+          if (event.buttons === 0) handleZoomSliderEnd(event);
+        }}
+        onMouseDown={(event) => event.stopPropagation()}
+        onClick={(event) => event.stopPropagation()}
+        onTouchStart={(event) => event.stopPropagation()}
+      >
+        <div className="mb-2 flex items-center justify-between gap-3">
+          <span className="text-xs font-semibold text-slate-700">
+            Thu phóng bản đồ
+          </span>
+
+          <span className="min-w-[42px] rounded-md bg-slate-100 px-2 py-1 text-center text-[11px] font-semibold text-slate-600">
+            {mapZoom.toFixed(1)}x
+          </span>
+        </div>
+
+        <div className="flex items-center gap-3">
+          <span
+            aria-hidden="true"
+            className="select-none text-lg font-semibold leading-none text-slate-500"
+          >
+            −
+          </span>
+
+          <input
+            type="range"
+            min={MAP_MIN_ZOOM}
+            max={MAP_MAX_ZOOM}
+            step={MAP_ZOOM_STEP}
+            value={mapZoom}
+            onInput={(event) =>
+              handleMapZoomChange(Number(event.currentTarget.value))
+            }
+            onChange={(event) =>
+              handleMapZoomChange(Number(event.currentTarget.value))
+            }
+            onPointerDown={(event) => event.stopPropagation()}
+            onPointerUp={(event) => event.stopPropagation()}
+            aria-label="Điều chỉnh mức thu phóng bản đồ"
+            className="h-2 w-full touch-none cursor-pointer accent-emerald-600"
+          />
+
+          <span
+            aria-hidden="true"
+            className="select-none text-lg font-semibold leading-none text-slate-500"
+          >
+            +
+          </span>
+        </div>
+      </div>
 
       {userLocation && (
         <div className="absolute right-4 top-4 z-10 flex items-center gap-2 rounded-full border border-blue-200 bg-white/95 px-3 py-2 text-xs font-medium text-blue-700 shadow-sm backdrop-blur">

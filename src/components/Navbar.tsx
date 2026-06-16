@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { LogIn, LogOut, Search, User, X } from "lucide-react";
 
@@ -35,6 +35,90 @@ type PlaceRow = {
 
 type SearchPlace = PlaceDetail;
 
+type UserLocation = {
+  lat: number;
+  lng: number;
+};
+
+const EARTH_RADIUS_KM = 6371;
+
+function toRadians(value: number) {
+  return (value * Math.PI) / 180;
+}
+
+function getDistanceInKm(from: UserLocation, to: UserLocation) {
+  const latitudeDistance = toRadians(to.lat - from.lat);
+  const longitudeDistance = toRadians(to.lng - from.lng);
+  const fromLatitude = toRadians(from.lat);
+  const toLatitude = toRadians(to.lat);
+
+  const haversine =
+    Math.sin(latitudeDistance / 2) ** 2 +
+    Math.cos(fromLatitude) *
+      Math.cos(toLatitude) *
+      Math.sin(longitudeDistance / 2) ** 2;
+
+  return (
+    2 *
+    EARTH_RADIUS_KM *
+    Math.atan2(Math.sqrt(haversine), Math.sqrt(1 - haversine))
+  );
+}
+
+function hasValidCoordinates(place: SearchPlace) {
+  return (
+    Number.isFinite(place.lat) &&
+    Number.isFinite(place.lng) &&
+    !(place.lat === 0 && place.lng === 0)
+  );
+}
+
+function sortPlacesByDistance(
+  placeList: SearchPlace[],
+  userLocation: UserLocation | null,
+) {
+  if (!userLocation) return placeList;
+
+  return [...placeList].sort((firstPlace, secondPlace) => {
+    const firstHasCoordinates = hasValidCoordinates(firstPlace);
+    const secondHasCoordinates = hasValidCoordinates(secondPlace);
+
+    if (!firstHasCoordinates && !secondHasCoordinates) return 0;
+    if (!firstHasCoordinates) return 1;
+    if (!secondHasCoordinates) return -1;
+
+    const firstDistance = getDistanceInKm(userLocation, {
+      lat: firstPlace.lat,
+      lng: firstPlace.lng,
+    });
+
+    const secondDistance = getDistanceInKm(userLocation, {
+      lat: secondPlace.lat,
+      lng: secondPlace.lng,
+    });
+
+    return firstDistance - secondDistance;
+  });
+}
+
+function formatDistanceFromCurrentLocation(
+  place: SearchPlace,
+  userLocation: UserLocation | null,
+) {
+  if (!userLocation || !hasValidCoordinates(place)) return null;
+
+  const distance = getDistanceInKm(userLocation, {
+    lat: place.lat,
+    lng: place.lng,
+  });
+
+  if (distance < 1) {
+    return `Cách vị trí hiện tại ${Math.round(distance * 1000)} m`;
+  }
+
+  return `Cách vị trí hiện tại ${distance.toFixed(1)} km`;
+}
+
 function normalizeSearchText(value: string) {
   return value
     .toLowerCase()
@@ -51,12 +135,7 @@ function splitSearchTerms(value: string, preserveDiacritics = false) {
     : normalizeSearchText(value);
 
   return text
-    .replace(
-      preserveDiacritics
-        ? /[^\p{L}\p{N}\s]+/gu
-        : /[^a-z0-9\s]+/g,
-      " ",
-    )
+    .replace(preserveDiacritics ? /[^\p{L}\p{N}\s]+/gu : /[^a-z0-9\s]+/g, " ")
     .trim()
     .split(/\s+/)
     .filter(Boolean);
@@ -124,6 +203,8 @@ export function Navbar() {
   const [loadingPlaces, setLoadingPlaces] = useState(false);
   const [selectedPlace, setSelectedPlace] = useState<PlaceDetail | null>(null);
   const [placeModalOpen, setPlaceModalOpen] = useState(false);
+  const [userLocation, setUserLocation] = useState<UserLocation | null>(null);
+  const requestedLocationForUserRef = useRef<string | null>(null);
 
   const totalProvinceCount = 63;
   const progressPercent =
@@ -183,7 +264,9 @@ export function Navbar() {
 
       if (error) throw error;
 
-      const mappedPlaces = ((data || []) as PlaceRow[]).map(mapPlaceRowToDetail);
+      const mappedPlaces = ((data || []) as PlaceRow[]).map(
+        mapPlaceRowToDetail,
+      );
 
       setPlaces(mappedPlaces);
     } catch (error) {
@@ -191,6 +274,35 @@ export function Navbar() {
     } finally {
       setLoadingPlaces(false);
     }
+  }
+
+  function requestCurrentLocation(userId: string) {
+    if (requestedLocationForUserRef.current === userId) return;
+
+    requestedLocationForUserRef.current = userId;
+
+    if (!navigator.geolocation) {
+      console.warn("Browser does not support geolocation.");
+      return;
+    }
+
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        setUserLocation({
+          lat: position.coords.latitude,
+          lng: position.coords.longitude,
+        });
+      },
+      (error) => {
+        console.warn("Cannot get current location for search:", error);
+        setUserLocation(null);
+      },
+      {
+        enableHighAccuracy: true,
+        timeout: 10000,
+        maximumAge: 60000,
+      },
+    );
   }
 
   async function loadUser() {
@@ -220,9 +332,12 @@ export function Navbar() {
       });
 
       await loadVisitedProvinceCount(sessionUser.id);
+      requestCurrentLocation(sessionUser.id);
     } else {
       setUser(null);
       setVisitedProvinceCount(0);
+      setUserLocation(null);
+      requestedLocationForUserRef.current = null;
     }
 
     setLoading(false);
@@ -233,6 +348,8 @@ export function Navbar() {
 
     setUser(null);
     setVisitedProvinceCount(0);
+    setUserLocation(null);
+    requestedLocationForUserRef.current = null;
 
     navigate("/", {
       replace: true,
@@ -263,7 +380,10 @@ export function Navbar() {
   }
 
   const searchResults = useMemo(() => {
-    const isAccentSearch = /[ăâđêôơưáàảãạấầẩẫậắằẳẵặếềểễệíìỉĩịóòỏõọốồổỗộớờởỡợúùủũụứừửữựýỳỷỹỵĂÂĐÊÔƠƯ]/.test(searchKeyword);
+    const isAccentSearch =
+      /[ăâđêôơưáàảãạấầẩẫậắằẳẵặếềểễệíìỉĩịóòỏõọốồổỗộớờởỡợúùủũụứừửữựýỳỷỹỵĂÂĐÊÔƠƯ]/.test(
+        searchKeyword,
+      );
     const keyword = isAccentSearch
       ? searchKeyword.toLowerCase().trim()
       : normalizeSearchText(searchKeyword);
@@ -276,7 +396,7 @@ export function Navbar() {
     });
 
     if (exactNameMatches.length > 0) {
-      return exactNameMatches.slice(0, 8);
+      return sortPlacesByDistance(exactNameMatches, userLocation).slice(0, 8);
     }
 
     const exactProvinceMatches = places.filter((place) => {
@@ -285,7 +405,10 @@ export function Navbar() {
     });
 
     if (exactProvinceMatches.length > 0) {
-      return exactProvinceMatches.slice(0, 8);
+      return sortPlacesByDistance(exactProvinceMatches, userLocation).slice(
+        0,
+        8,
+      );
     }
 
     const startsWithNameMatches = places.filter((place) => {
@@ -294,7 +417,10 @@ export function Navbar() {
     });
 
     if (startsWithNameMatches.length > 0) {
-      return startsWithNameMatches.slice(0, 8);
+      return sortPlacesByDistance(startsWithNameMatches, userLocation).slice(
+        0,
+        8,
+      );
     }
 
     const startsWithProvinceMatches = places.filter((place) => {
@@ -302,7 +428,10 @@ export function Navbar() {
       return province.startsWith(keyword);
     });
 
-    const startsWithMatches = [...startsWithNameMatches, ...startsWithProvinceMatches];
+    const startsWithMatches = [
+      ...startsWithNameMatches,
+      ...startsWithProvinceMatches,
+    ];
 
     const searchTerms = splitSearchTerms(keyword, isAccentSearch);
 
@@ -318,8 +447,11 @@ export function Navbar() {
       uniqueMap.set(place.id, place);
     });
 
-    return Array.from(uniqueMap.values()).slice(0, 8);
-  }, [places, searchKeyword]);
+    return sortPlacesByDistance(
+      Array.from(uniqueMap.values()),
+      userLocation,
+    ).slice(0, 8);
+  }, [places, searchKeyword, userLocation]);
 
   const shouldShowSearchDropdown =
     searchFocused && searchKeyword.trim().length > 0;
@@ -339,10 +471,7 @@ export function Navbar() {
       loadUser();
     };
 
-    window.addEventListener(
-      "visited-provinces-updated",
-      handleVisitedUpdated,
-    );
+    window.addEventListener("visited-provinces-updated", handleVisitedUpdated);
 
     window.addEventListener("profile-updated", handleProfileUpdated);
 
@@ -356,6 +485,8 @@ export function Navbar() {
       } else {
         setUser(null);
         setVisitedProvinceCount(0);
+        setUserLocation(null);
+        requestedLocationForUserRef.current = null;
         setLoading(false);
       }
     });
@@ -468,6 +599,18 @@ export function Navbar() {
                       <div className="text-sm font-semibold text-slate-900">
                         {place.name}
                       </div>
+
+                      {formatDistanceFromCurrentLocation(
+                        place,
+                        userLocation,
+                      ) && (
+                        <div className="mt-1 text-xs text-slate-500">
+                          {formatDistanceFromCurrentLocation(
+                            place,
+                            userLocation,
+                          )}
+                        </div>
+                      )}
                     </button>
                   ))}
               </div>
